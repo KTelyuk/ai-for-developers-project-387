@@ -1,0 +1,83 @@
+[settings]
+experimental = true
+
+[tools]
+node = "24.22.3"
+hk = "2.12.0"
+pitchfork = "2.34.0"
+jactionlint = "2.6.0"
+gh = "2.104.0"
+"github:agent-sh/agnix" = "0.61.0"
+
+[env]
+_.path = ["{{config_root}}/node_modules/.bin"]
+
+[hooks]
+postinstall = "npm ci"
+
+[tasks.install]
+description = "Install npm dependencies and git hooks"
+run = ["npm ci", "hk install"]
+
+[tasks.generate]
+description = "Compile TypeSpec to OpenAPI, generate backend types and the frontend SDK"
+run = ["npm run build -w typespec", "npm run generate -w backend", "npm run generate -w frontend"]
+
+# Генерация повторяется и сверяется с закоммиченным: правка контракта без `mise run generate`
+# или ручная правка сгенерированного кода роняет проверку. `--intent-to-add` показывает в диффе
+# и новые сгенерированные файлы, которых нет в git.
+[tasks.check-generated]
+description = "Regenerate OpenAPI, backend types and the frontend SDK and fail if they differ from git"
+depends = ["generate"]
+run = [
+  "git add --intent-to-add -- openapi backend/src/api frontend/src/api",
+  "git diff --exit-code -- openapi backend/src/api frontend/src/api",
+]
+
+[tasks.dev]
+description = "Start backend and frontend dev servers in the background"
+run = "mise daemons start"
+
+[tasks.lint]
+description = "Run hk linters on all files"
+run = "hk check --all"
+
+[tasks.format]
+description = "Fix lint and formatting issues"
+run = "hk fix --all"
+
+[tasks.typecheck]
+description = "Type-check all packages"
+run = ["npm run typecheck -w backend", "npm run typecheck -w frontend", "tsc -p e2e"]
+
+[tasks.test]
+description = "Run all tests with coverage thresholds"
+run = ["npm test -w backend -- --coverage", "npm test -w frontend -- --coverage"]
+
+[tasks.build]
+description = "Build the frontend"
+run = "npm run build -w frontend"
+
+# Все проверки одной командой — локально, в pre-push и в CI: сначала сгенерированный код,
+# затем параллельно линтеры, типы и тесты, в конце e2e в браузере против настоящего сервера.
+[tasks.check]
+description = "Run all checks: generated code, lint, typecheck, tests, e2e in a browser"
+depends = ["check-generated"]
+run = ["mise run lint ::: typecheck ::: test", "mise run e2e"]
+
+# Без E2E_BASE_URL Playwright сам поднимает бэкенд с собранным фронтендом (настоящий сервер,
+# ответы API не подменяются), поэтому сначала собирается фронтенд. С E2E_BASE_URL — против
+# уже запущенного приложения, например контейнера в CI.
+[tasks.e2e]
+description = "Build the frontend and run Playwright e2e tests against the app"
+depends = ["build"]
+run = "playwright test --config e2e/playwright.config.ts"
+
+[daemons.backend]
+run = "npm run dev -w backend"
+ready_port = 3000
+
+[daemons.frontend]
+run = "npm run dev -w frontend"
+ready_output = "Local:"
+depends = ["backend"]

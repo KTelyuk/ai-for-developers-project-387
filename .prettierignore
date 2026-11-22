@@ -1,0 +1,12 @@
+package-lock.json
+openapi/
+frontend/src/api/
+backend/src/api/
+frontend/src/components/ui/
+**/dist/
+.github/workflows/hexlet-check.yml
+.github/workflows/README.md
+.claude/skills/
+skills-lock.json
+# Пишет release-please в своём формате при каждом релизе.
+CHANGELOG.md

@@ -1,0 +1,43 @@
+amends "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v2.12.0/hk@2.12.0#/Builtins.pkl"
+
+local linters = new Mapping<String, Step | Group> {
+  ["oxlint"] = Builtins.ox_lint
+  ["oxfmt"] = Builtins.oxfmt
+  ["jactionlint"] = Builtins.jactionlint
+  ["merge-conflict"] = Builtins.check_merge_conflict
+  ["private-key"] = Builtins.detect_private_key
+  ["large-files"] = Builtins.check_added_large_files
+  ["agnix"] {
+    glob = List("AGENTS.md", "CLAUDE.md")
+    check = "agnix --strict {{files}}"
+  }
+}
+
+hooks {
+  ["pre-commit"] {
+    fix = true
+    stash = "git"
+    steps = linters
+  }
+  ["commit-msg"] {
+    steps {
+      ["conventional-commit"] = Builtins.check_conventional_commit
+    }
+  }
+  ["pre-push"] {
+    steps {
+      ["check"] {
+        check = "mise run check"
+        exclusive = true
+      }
+    }
+  }
+  ["check"] {
+    steps = linters
+  }
+  ["fix"] {
+    fix = true
+    steps = linters
+  }
+}

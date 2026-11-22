@@ -1,0 +1,105 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - '**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+
+      # `mise run check` включает e2e: Playwright поднимает настоящий сервер с собранным фронтендом.
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Run all checks
+        run: mise run check
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report-check
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build image
+        run: docker build --tag call-calendar .
+
+      - name: Start container
+        run: docker run --detach --name app --env PORT=8080 --publish 8080:8080 call-calendar
+
+      - name: Wait until healthy
+        run: |
+          for _ in $(seq 1 60); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' app)
+            echo "health: $status"
+            if [ "$status" = healthy ]; then exit 0; fi
+            if [ "$status" = unhealthy ]; then break; fi
+            sleep 1
+          done
+          docker logs app
+          exit 1
+
+      - name: Smoke test
+        run: |
+          set -eu
+          base=http://127.0.0.1:8080
+          curl --fail --silent "$base/api/health" | grep -q '"status":"ok"'
+          for path in / /book; do
+            curl --fail --silent "$base$path" | grep -q '<div id="root">'
+          done
+          code=$(curl --silent --output body.json --write-out '%{http_code}' "$base/api/does-not-exist")
+          test "$code" = 404
+          grep -q '"code":"NOT_FOUND"' body.json
+
+      # Те же e2e против собранного образа: проверяет, что контейнер отдаёт фронтенд и API.
+      # Node.js и npm-зависимости ставит mise (хук postinstall → npm ci).
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: End-to-end tests
+        env:
+          E2E_BASE_URL: http://127.0.0.1:8080
+        run: mise run e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+      - name: Container logs
+        if: always()
+        run: docker logs app || true
