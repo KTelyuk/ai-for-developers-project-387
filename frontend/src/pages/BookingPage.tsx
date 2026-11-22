@@ -11,6 +11,7 @@ import { LoadError, Loading } from '@/components/LoadState.tsx';
 import { Button } from '@/components/ui/button.tsx';
 import { errorCode } from '@/lib/bookings.ts';
 import { formatMomentDay, formatTimeRange, momentDate } from '@/lib/format.ts';
+import { OWNER_TIME_ZONE_LABEL } from '@/lib/schedule.ts';
 
 // Страница записи: гость открывает её по ссылке `/bookings/{id}?token=...` и может изменить
 // или отменить запись.
@@ -85,12 +86,13 @@ export function BookingPage() {
           <dt className="text-muted-foreground">Дата</dt>
           <dd>{formatMomentDay(startAt)}</dd>
           <dt className="text-muted-foreground">Время</dt>
-          <dd>{formatTimeRange(startAt, endAt)} (Алматы)</dd>
+          <dd>{formatTimeRange(startAt, endAt)}</dd>
           <dt className="text-muted-foreground">Имя</dt>
           <dd className="break-words">{guestName}</dd>
           <dt className="text-muted-foreground">Email</dt>
           <dd className="break-words">{guestEmail}</dd>
         </dl>
+        <p className="text-sm text-muted-foreground">{OWNER_TIME_ZONE_LABEL}</p>
 
         {started ? (
           <p role="alert" className="text-sm font-medium">

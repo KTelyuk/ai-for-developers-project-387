@@ -86,6 +86,7 @@ describe('страница бронирования: запись', () => {
     expect(confirmation).toHaveTextContent('Консультация');
     expect(confirmation).toHaveTextContent('вт, 17 ноября');
     expect(confirmation).toHaveTextContent('09:00–10:00');
+    expect(confirmation).toHaveTextContent('Время указано по Алматы (UTC+5)');
     expect(within(confirmation).getByRole('textbox', { name: 'Ссылка на запись' })).toHaveValue(
       LINK,
     );

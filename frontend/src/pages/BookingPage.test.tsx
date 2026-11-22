@@ -18,6 +18,7 @@ describe('страница записи', () => {
     expect(await within(region).findByText('Консультация')).toBeInTheDocument();
     expect(region).toHaveTextContent('вт, 17 ноября');
     expect(region).toHaveTextContent('09:00–10:00');
+    expect(region).toHaveTextContent('Время указано по Алматы (UTC+5)');
     expect(region).toHaveTextContent('Анна');
   });
 

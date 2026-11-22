@@ -54,7 +54,7 @@ describe('страница бронирования: слоты дня', () => {
     const times = within(list).getAllByRole('button');
     expect(times.map((button) => button.textContent)).toEqual(['09:00', '14:00']);
     expect(screen.getByRole('region', { name: 'Время' })).toHaveTextContent(
-      'Asia/Almaty (UTC+05:00)',
+      'Время указано по Алматы (UTC+5)',
     );
     expect(requested).toEqual(['2026-11-17']);
     expect(screen.getByRole('button', { name: /17 ноября/ })).toHaveAttribute(
