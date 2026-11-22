@@ -10,7 +10,7 @@ const DAY_MS = 24 * 60 * 60_000;
 export const WINDOW_DAYS = 14;
 
 // Подпись часового пояса владельца: всё время в интерфейсе — по Алматы.
-export const OWNER_TIME_ZONE_LABEL = 'Asia/Almaty (UTC+05:00)';
+export const OWNER_TIME_ZONE_LABEL = 'Время указано по Алматы (UTC+5)';
 
 export type WindowDay = {
   date: string;

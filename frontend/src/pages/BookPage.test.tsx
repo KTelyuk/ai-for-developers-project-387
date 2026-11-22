@@ -33,7 +33,7 @@ describe('страница бронирования: выбор типа вст�
     expect(within(info).getByRole('heading', { name: 'Консультация' })).toBeInTheDocument();
     expect(info).toHaveTextContent('Подробный разбор вашей задачи');
     expect(info).toHaveTextContent('60 мин');
-    expect(info).toHaveTextContent('Asia/Almaty (UTC+05:00)');
+    expect(info).toHaveTextContent('Время указано по Алматы (UTC+5)');
     expect(screen.queryByRole('list', { name: 'Типы встреч' })).not.toBeInTheDocument();
   });
 
