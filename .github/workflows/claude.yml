@@ -51,4 +51,4 @@ jobs:
           claude_args: >-
             --model claude-sonnet-5-5
             --max-turns 30
-            --allowedTools "Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(git log:*),Bash(git diff:*)"
+            --allowedTools "Skill,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(git log:*),Bash(git diff:*)"
