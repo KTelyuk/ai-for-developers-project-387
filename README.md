@@ -272,9 +272,9 @@ docker run --rm --init --name call-calendar --publish 3000:3000 call-calendar
 
 | Воркфлоу                                     | Событие                                                                                            | Модель                                | Назначение                                                                                  | Где смотреть результат                                                                                                                                                      |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`claude.yml`](.github/workflows/claude.yml) | `issue_comment` и `pull_request_review_comment` (`types: [created]`) с командой `@claude` в тексте | `claude-sonnet-5-5` (подписка Claude) | Обсуждение issue и PR, объяснения, запуск скиллов проекта: спецификация, тикеты, реализация | Ответ агента — комментарием в том же issue или PR; ход работы — во вкладке [Actions](https://github.com/KTelyuk/ai-for-developers-project-387/actions/workflows/claude.yml) |
+| [`claude.yml`](.github/workflows/claude.yml) | `issue_comment` и `pull_request_review_comment` (`types: [created]`) с командой `@claude` в тексте | `claude-sonnet-5-5` (подписка Claude) | Обсуждение issue и PR, объяснения, скиллы проекта без `disable-model-invocation`; `to-spec`, `to-tickets`, `implement-spec` агент вызвать не может | Ответ агента — комментарием в том же issue или PR; ход работы — во вкладке [Actions](https://github.com/KTelyuk/ai-for-developers-project-387/actions/workflows/claude.yml) |
 
-Пример: `@claude explain this issue` или `@claude запусти скилл to-spec по обсуждению этого issue`. Вопросы и решения остаются в обсуждении, поэтому следующий вызов прочитает их перед работой.
+Пример: `@claude explain this issue` или `@claude прочитай скилл to-spec и выполни его шаги по обсуждению этого issue`. Вопросы и решения остаются в обсуждении, поэтому следующий вызов прочитает их перед работой.
 
 ### Отличие от OpenCode из задания
 
@@ -292,9 +292,10 @@ docker run --rm --init --name call-calendar --publish 3000:3000 call-calendar
 
 Раннер начинает с чистого окружения, но всё нужное агенту лежит в репозитории и приходит с `actions/checkout`:
 
-- скиллы проекта — в [`.claude/skills/`](.claude/skills/) (среди них `to-spec`, `to-tickets`, `implement-spec`); глобальных скиллов проект не использует;
-- правила и команды — в [`AGENTS.md`](AGENTS.md) (подключён из `CLAUDE.md`);
-- трекер — GitHub Issues этого репозитория, настройки в [`docs/agents/`](docs/agents/). Агент читает issues через `gh`, токен приложения action передаёт в `GH_TOKEN`.
+- скиллы проекта — в [`.claude/skills/`](.claude/skills/); глобальных скиллов проект не использует. Рабочий процесс: `to-spec` (спецификация), `to-tickets` (тикеты), `implement-spec` (реализация), а также `implement`, `triage`, `wayfinder`. Остальные: `tdd`, `diagnosing-bugs`, `code-review`, `codebase-design`, `domain-modeling`, `improve-codebase-architecture`, `grilling`, `grill-me`, `grill-with-docs`, `to-questionnaire`, `pr`, `prototype`, `research`, `retro`, `handoff`, `teach`, `wait-what`, `wizard`, `writing-for-agents`, `ask-matt`, `setup-matt-pocock-skills`;
+- вызов через `Skill` разрешён в `--allowedTools`, но не для всех скиллов: у `to-spec`, `to-tickets`, `implement-spec` и ещё у ряда скиллов в `SKILL.md` стоит `disable-model-invocation: true`. Агент не может вызвать их сам, их запускает человек (`/to-spec` и т. д. в локальной сессии). В GitHub агент может прочитать `SKILL.md` и выполнить шаги по описанию, если попросить явно. Скиллы без этого флага (например `tdd`, `code-review`, `research`, `pr`) он вызывает через `Skill`;
+- правила и команды — в [`AGENTS.md`](AGENTS.md) (подключён из `CLAUDE.md`). Все проверки запускает одна команда: `mise run check` (сверка сгенерированного кода, линтеры, типы, тесты с покрытием, e2e). Её же вызывают CI и pre-push хук; для e2e нужны браузеры: `npx playwright install chromium webkit`;
+- трекер — GitHub Issues этого репозитория, спецификация — `docs/spec.md`, настройки — в [`docs/agents/`](docs/agents/). Агент работает с issues через `gh`, токен приложения action передаёт в `GH_TOKEN`; метки триажа: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. Issue закрывает коммит с `(#N)` в заголовке и `Closes #N` в теле PR. В `--allowedTools` воркфлоу разрешено только чтение через `gh`, поэтому создание и правка issues из GitHub требуют расширения списка.
 
 ### Доступ и безопасность
 
