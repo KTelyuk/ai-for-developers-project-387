@@ -147,6 +147,7 @@
 | CI        | GitHub Actions (`.github/workflows/ci.yml`): на каждый push: job `check` ставит инструменты через `jdx/mise-action` и браузеры Playwright и запускает `mise run check` (с e2e); job `docker` собирает образ, запускает контейнер, ждёт health-check, делает smoke-тест и прогоняет e2e Playwright против контейнера |
 | Релизы    | release-please (`.github/workflows/release-please.yml`): после слияния в `main` собирает Conventional Commits в release-PR с новой версией и `CHANGELOG.md`; слияние release-PR создаёт тег и GitHub Release                                                                                                        |
 | Хостинг   | Render (деплой из Docker-образа)                                                                                                                                                                                                                                                                                    |
+| Агент     | Claude Code GitHub Action (`.github/workflows/claude.yml`): отвечает на команду `@claude` в комментариях к issue и PR, см. [«Агент в GitHub»](#агент-в-github)                                                                                                                                                      |
 
 ### Структура репозитория
 
@@ -262,6 +263,53 @@ docker run --rm --init --name call-calendar --publish 3000:3000 call-calendar
 3. Перезапустите Claude Code и подтвердите подключение сервера `render` из `.mcp.json`.
 
 Ключ даёт доступ ко всему workspace Render: не вписывайте его в `.mcp.json` и не коммитьте.
+
+## Агент в GitHub
+
+Тот же агент, что работает локально, отвечает на команды в issues и pull requests. Комментарий запускает GitHub Actions, агент выполняется на раннере с рабочей копией репозитория, а ответ появляется комментарием от имени приложения Claude.
+
+### Воркфлоу
+
+| Воркфлоу                                     | Событие                                                                                            | Модель                                | Назначение                                                                                  | Где смотреть результат                                                                                                                                                      |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`claude.yml`](.github/workflows/claude.yml) | `issue_comment` и `pull_request_review_comment` (`types: [created]`) с командой `@claude` в тексте | `claude-sonnet-5-5` (подписка Claude) | Обсуждение issue и PR, объяснения, запуск скиллов проекта: спецификация, тикеты, реализация | Ответ агента — комментарием в том же issue или PR; ход работы — во вкладке [Actions](https://github.com/KTelyuk/ai-for-developers-project-387/actions/workflows/claude.yml) |
+
+Пример: `@claude explain this issue` или `@claude запусти скилл to-spec по обсуждению этого issue`. Вопросы и решения остаются в обсуждении, поэтому следующий вызов прочитает их перед работой.
+
+### Отличие от OpenCode из задания
+
+Вместо OpenCode подключён Claude Code через [Claude Code GitHub Action](https://github.com/anthropics/claude-code-action) и [Claude GitHub App](https://github.com/apps/claude). Сценарии те же: команда в комментарии, ответ от имени приложения, скиллы и правила проекта.
+
+| В OpenCode                     | Здесь                                                                                                                                                                                                          |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub App `opencode-agent`    | GitHub App `claude`                                                                                                                                                                                            |
+| `mentions`: `/opencode`, `/oc` | `trigger_phrase: '@claude'` — одна команда, значение по умолчанию. Других команд нет                                                                                                                           |
+| `model: provider/model`        | `claude_args: --model claude-sonnet-5-5`                                                                                                                                                                       |
+| `share`                        | Такого параметра нет: сессии агента никуда не публикуются, ход работы виден только в логе прогона Actions. Полный вывод (`show_full_output`) выключен, чтобы не светить контекст в логах открытого репозитория |
+| Секрет `OPENCODE_API_KEY`      | Секрет `CLAUDE_CODE_OAUTH_TOKEN`: токен подписки Claude из `claude setup-token`                                                                                                                                |
+
+### Скиллы и настройки на раннере
+
+Раннер начинает с чистого окружения, но всё нужное агенту лежит в репозитории и приходит с `actions/checkout`:
+
+- скиллы проекта — в [`.claude/skills/`](.claude/skills/) (среди них `to-spec`, `to-tickets`, `implement-spec`); глобальных скиллов проект не использует;
+- правила и команды — в [`AGENTS.md`](AGENTS.md) (подключён из `CLAUDE.md`);
+- трекер — GitHub Issues этого репозитория, настройки в [`docs/agents/`](docs/agents/). Агент читает issues через `gh`, токен приложения action передаёт в `GH_TOKEN`.
+
+### Доступ и безопасность
+
+- **Кто запускает.** Условие `if` пропускает работу, только если в комментарии есть `@claude`, автор — `OWNER`, `MEMBER` или `COLLABORATOR`, и он не бот. Action дополнительно проверяет, что у автора есть право записи, и по умолчанию не реагирует на ботов, поэтому агент не отвечает сам себе.
+- **Повторы.** `types: [created]`: правка комментария агента заново не запускает.
+- **Форки.** `pull_request_target` не используется, `allow_fork_prs: 'false'`: недоверенные PR из форков не получают ни секрет, ни запуск агента.
+- **Права.** Воркфлоу получает только чтение (`contents`, `issues`, `pull-requests`, `actions`) и `id-token: write`, чтобы обменять OIDC-токен на короткоживущий токен Claude GitHub App. Комментарии и push агент делает правами приложения, поэтому у `actions/checkout` стоит `persist-credentials: false`. Инструменты агента ограничены чтением: `gh issue view/list`, `gh pr view/diff`, `git log/diff`.
+- **Ключ.** Токен лежит только в Settings → Secrets and variables → Actions под именем `CLAUDE_CODE_OAUTH_TOKEN`.
+- **Остановка.** `timeout-minutes: 20` и `--max-turns 30` ограничивают один прогон, `concurrency` по номеру issue или PR не даёт запускать агента параллельно в одном обсуждении. Текущий прогон останавливает **Cancel workflow** в Actions, будущие — **Disable workflow**; при необходимости токен отзывают в настройках аккаунта Claude.
+
+### Подключение
+
+1. Установить [Claude GitHub App](https://github.com/apps/claude) на репозиторий.
+2. Выполнить `claude setup-token` и сохранить токен в секрет репозитория `CLAUDE_CODE_OAUTH_TOKEN`.
+3. Написать в issue `@claude explain this issue` и проверить ответ и прогон в Actions.
 
 ## План реализации
 

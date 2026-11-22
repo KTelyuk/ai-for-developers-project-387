@@ -1,6 +1,6 @@
 # Issue tracker: GitHub Issues
 
-Tickets for this repo live as GitHub issues in `KTelyuk/ai-for-developers-project-387`. The project has one spec, kept in git at `docs/spec.md` next to the code it describes. Use the `gh` CLI for all issue operations (from bash: `mise exec -- gh ...`, since `gh` is a mise tool).
+Tickets for this repo live as GitHub issues in `KTelyuk/ai-for-developers-project-387`. The project has one spec, kept in git at `docs/spec.md` next to the code it describes. Use the `gh` CLI for all issue operations (locally from bash: `mise exec -- gh ...`, since `gh` is a mise tool; on a GitHub Actions runner `gh` is preinstalled and authenticated through `GH_TOKEN`, so call `gh ...` directly).
 
 ## Conventions
 
