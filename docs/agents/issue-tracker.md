@@ -1,6 +1,6 @@
 # Issue tracker: GitHub Issues
 
-Tickets for this repo live as GitHub issues in `KTelyuk/ai-for-developers-project-387`. The project has one spec, kept in git at `docs/spec.md` next to the code it describes. Use the `gh` CLI for all issue operations (locally from bash: `mise exec -- gh ...`, since `gh` is a mise tool; on a GitHub Actions runner `gh` is preinstalled and authenticated through `GH_TOKEN`, so call `gh ...` directly).
+Tickets for this repo live as GitHub issues in `KTelyuk/ai-for-developers-project-387`. `docs/spec.md` describes the whole service as built; a spec for a new change is a GitHub issue (see below), and its implementation brings `docs/spec.md` up to date. Use the `gh` CLI for all issue operations (locally from bash: `mise exec -- gh ...`, since `gh` is a mise tool; on a GitHub Actions runner `gh` is preinstalled and authenticated through `GH_TOKEN`, so call `gh ...` directly).
 
 ## Conventions
 
@@ -17,7 +17,14 @@ Issues and PRs share one number space, so a bare `#42` may be either: resolve wi
 
 ## When a skill says "publish to the issue tracker"
 
-A spec goes to `docs/spec.md`; a ticket is a new GitHub issue.
+Both a spec and a ticket are new GitHub issues; the trail runs **request → spec → tickets**, each linked to the one before.
+
+- **Request**: the incoming issue a person opened. It stays open while the spec and tickets are worked; never close or relabel it from a skill.
+- **Spec**: a new issue titled `Спецификация: <тема>`, labelled `spec` and `ready-for-agent`, its body opening with `Исходное обращение: #<request>`. Then post a comment on the request linking the spec.
+- **Tickets**: sub-issues of the spec (`--parent <spec>`), labelled `ready-for-agent`, with native blocking edges. `## Parent` names the spec.
+- **Approval**: the person confirms the spec and ticket list in a comment on the request. A PR implementing the spec links that comment's URL; if behaviour or scope changes materially, ask on the request instead of deciding.
+
+Labels `spec` and `ready-for-agent` mark issues the skills prepared, so automatic triage skips them.
 
 ## When a skill says "fetch the relevant ticket"
 
