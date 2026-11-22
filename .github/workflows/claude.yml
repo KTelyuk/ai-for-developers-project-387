@@ -4,7 +4,7 @@ name: claude
 # Описание: README.md, раздел «Агент в GitHub».
 on:
   # Триггер нужен по заданию. Автора проверяет `if` ниже (OWNER/MEMBER/COLLABORATOR, не бот),
-  # код PR не исполняется: агенту разрешены только команды чтения gh и git, PR из форков отключены.
+  # PR из форков отключены, а запускать агента и его тесты на ветке могут только участники с правом записи.
   issue_comment: # jactionlint ignore=dangerous-triggers
     types: [created]
   pull_request_review_comment:
@@ -26,7 +26,7 @@ jobs:
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
       github.event.comment.user.type != 'Bot'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     # Писать в репозиторий агент будет токеном Claude GitHub App, а не GITHUB_TOKEN.
     permissions:
       contents: read
@@ -37,8 +37,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 1
+          # Полная история: implement-spec создаёт интеграционную ветку и сливает в неё тикеты.
+          fetch-depth: 0
           persist-credentials: false
+
+      # Node.js, gh и зависимости проекта (хук postinstall → npm ci): агенту нужны тесты, линтеры и генерация.
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
 
       - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
         with:
@@ -48,7 +52,11 @@ jobs:
           allow_fork_prs: 'false' # jactionlint ignore=unknown-action-input
           additional_permissions: |
             actions: read
+          # Скиллы to-spec, to-tickets, implement-spec и другие с disable-model-invocation модель сама не выбирает.
+          # Комментарий доверенного участника с прямой просьбой запустить скилл — это ручной вызов человеком,
+          # поэтому агент читает SKILL.md и выполняет его шаги.
           claude_args: >-
             --model claude-sonnet-5-5
-            --max-turns 30
-            --allowedTools "Skill,Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(git log:*),Bash(git diff:*)"
+            --max-turns 80
+            --append-system-prompt "Если в комментарии участник прямо просит запустить скилл проекта по имени (например: запусти скилл to-spec), это ручной вызов скилла человеком, как команда /to-spec в локальной сессии. Прочитай .claude/skills/ИМЯ/SKILL.md и выполни его шаги, даже если в нём стоит disable-model-invocation: true. Трекер и правила публикации описаны в docs/agents/. Вопросы, которые скилл велит задать пользователю, задай комментарием в issue и закончи работу: ответ придёт следующим вызовом. Скиллы, о которых участник не просил, сам не запускай."
+            --allowedTools "Skill,Agent,Task,Read,Glob,Grep,Edit,Write,Bash(gh issue:*),Bash(gh label list:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr list:*),Bash(gh pr checks:*),Bash(mise exec -- gh issue:*),Bash(mise run lint:*),Bash(mise run format:*),Bash(mise run typecheck:*),Bash(mise run test:*),Bash(mise run build:*),Bash(mise run generate:*),Bash(mise run check-generated:*),Bash(npm test:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git branch:*),Bash(git switch:*),Bash(git checkout:*),Bash(git merge:*),Bash(git worktree:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*)"
