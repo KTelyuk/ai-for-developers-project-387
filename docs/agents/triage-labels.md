@@ -13,3 +13,7 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
 Edit the "Label in our tracker" column to match whatever vocabulary you actually use.
+
+## Prepared issues
+
+`spec` marks a spec published by `to-spec`. Together with `ready-for-agent` on tickets from `to-tickets`, it separates prepared issues from incoming requests: automatic triage (`.github/workflows/triage.yml`) skips any issue carrying either label at creation.
