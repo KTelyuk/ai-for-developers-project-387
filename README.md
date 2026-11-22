@@ -276,17 +276,17 @@ docker run --rm --init --name call-calendar --publish 3000:3000 call-calendar
 
 Пример: `@claude explain this issue` или `@claude запусти скилл to-spec по обсуждению этого issue`. Вопросы и решения остаются в обсуждении, поэтому следующий вызов прочитает их перед работой.
 
-### Отличие от OpenCode из задания
+### Настройки агента
 
-Вместо OpenCode подключён Claude Code через [Claude Code GitHub Action](https://github.com/anthropics/claude-code-action) и [Claude GitHub App](https://github.com/apps/claude). Сценарии те же: команда в комментарии, ответ от имени приложения, скиллы и правила проекта.
+Агент — Claude Code: [Claude Code GitHub Action](https://github.com/anthropics/claude-code-action) и [Claude GitHub App](https://github.com/apps/claude).
 
-| В OpenCode                     | Здесь                                                                                                                                                                                                          |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub App `opencode-agent`    | GitHub App `claude`                                                                                                                                                                                            |
-| `mentions`: `/opencode`, `/oc` | `trigger_phrase: '@claude'` — одна команда, значение по умолчанию. Других команд нет                                                                                                                           |
-| `model: provider/model`        | `claude_args: --model claude-sonnet-5-5`                                                                                                                                                                       |
-| `share`                        | Такого параметра нет: сессии агента никуда не публикуются, ход работы виден только в логе прогона Actions. Полный вывод (`show_full_output`) выключен, чтобы не светить контекст в логах открытого репозитория |
-| Секрет `OPENCODE_API_KEY`      | Секрет `CLAUDE_CODE_OAUTH_TOKEN`: токен подписки Claude из `claude setup-token`                                                                                                                                |
+| Настройка         | Значение                                                                                                                                                                                 |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub App        | `claude`, установлен только на этот репозиторий                                                                                                                                          |
+| Команда вызова    | `trigger_phrase: '@claude'` — одна команда, значение по умолчанию. Других команд нет                                                                                                     |
+| Модель            | `claude_args: --model claude-sonnet-5-5`                                                                                                                                                 |
+| Публикация сессий | Сессии агента никуда не публикуются, ход работы виден только в логе прогона Actions. Полный вывод (`show_full_output`) выключен, чтобы не светить контекст в логах открытого репозитория |
+| Секрет            | `CLAUDE_CODE_OAUTH_TOKEN`: токен подписки Claude из `claude setup-token`                                                                                                                 |
 
 ### Скиллы и настройки на раннере
 
