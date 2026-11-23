@@ -1,0 +1,8 @@
+{
+  "name": "review-tools",
+  "private": true,
+  "description": "Claude Code CLI для авторевью в .github/workflows/review.yml. Не входит в npm workspaces проекта.",
+  "devDependencies": {
+    "@anthropic-ai/claude-code": "2.1.330"
+  }
+}

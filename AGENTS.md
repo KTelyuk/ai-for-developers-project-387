@@ -33,6 +33,7 @@ npm workspaces: `typespec/`, `backend/`, `frontend/`.
 - Не изменять и не переименовывать `.github/workflows/hexlet-check.yml` — это проверка Хекслета.
 - Агент в GitHub — `.github/workflows/claude.yml`: команда `@claude` в комментарии к issue или PR от доверенного участника. При изменении воркфлоу агента обновлять раздел «Агент в GitHub» в `README.md`.
 - Релизы ведёт release-please (`release-please-config.json`, `.release-please-manifest.json`): версию, `CHANGELOG.md` и манифест вручную не меняют — их обновляет release-PR.
+- PR заполняют по шаблону `.github/pull_request_template.md`: ссылки на обращение, спецификацию, тикеты и согласование, проверки с SHA, риск и откат. Критерии ревью — `REVIEW.md`, их же получает авторевью `.github/workflows/review.yml`.
 - PR, включая release-PR, сливают через squash (`gh pr merge --squash`): release-please читает `feat:` в теле merge-коммита как ещё один коммит, и пункт попадает в `CHANGELOG.md` дважды.
 - Версии инструментов меняются только в `mise.toml` и `package.json`.
 

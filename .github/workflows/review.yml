@@ -1,0 +1,154 @@
+name: review
+
+# Авторевью: независимый агент читает PR, спецификацию, тикеты, diff и результаты CI
+# и оставляет замечания по критериям из REVIEW.md. Код не меняет, правки делает агент
+# из claude.yml только по команде человека. Описание: README.md, раздел «Агент в GitHub».
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Новый push в PR отменяет ревью прежней версии: замечания к устаревшему SHA не нужны.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  review:
+    # Только ветки этого репозитория (PR из fork не получают секрет модели) и доверенные авторы:
+    # участники с правом записи или приложение Claude, которое открывает PR implement-spec.
+    # Общий фильтр по типу Bot не подходит: он отключил бы ревью PR агента.
+    # Черновик не ревьюится, ревью начнётся на ready_for_review.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft &&
+      (contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association) ||
+       github.event.pull_request.user.login == 'claude[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Модель работает только с чтением: публикует ответ отдельное задание publish.
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+      checks: read
+      statuses: read
+    outputs:
+      body: ${{ steps.model.outputs.body }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+    steps:
+      # Версия автора PR, а не временный merge-коммит: замечания относятся к тому SHA, что видит человек.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # CI запускается параллельно на push. Ревью ждёт его до 12 минут, чтобы прочитать итог;
+      # если CI не успел, в отчёт попадает текущее состояние проверок.
+      - name: Wait for CI on head SHA
+        run: |
+          set -eu
+          for _ in $(seq 1 24); do
+            gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs" --paginate \
+              --jq '.check_runs[] | select(.name != "review" and .name != "publish") | [.name, .status, (.conclusion // "-"), .html_url] | @tsv' \
+              > "$RUNNER_TEMP/ci.tsv"
+            if [ -s "$RUNNER_TEMP/ci.tsv" ] && ! cut -f2 "$RUNNER_TEMP/ci.tsv" | grep -qv completed; then
+              break
+            fi
+            sleep 30
+          done
+          echo "git rev-parse HEAD: $(git rev-parse HEAD)"
+          cat "$RUNNER_TEMP/ci.tsv"
+
+      # Версия CLI закреплена в .github/review/package-lock.json, отдельно от npm workspaces проекта:
+      # так `claude` из node_modules/.bin не подменяет локальный Claude Code разработчика.
+      - name: Install Claude Code CLI
+        run: |
+          npm ci --prefix .github/review
+          echo "$GITHUB_WORKSPACE/.github/review/node_modules/.bin" >> "$GITHUB_PATH"
+
+      # В prompt попадают только номер PR, SHA и пути к файлам. Текст PR, issues и diff агент
+      # читает сам через gh и git: чужой текст не становится частью инструкции.
+      - name: Review
+        id: model
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -eu
+          prompt=$(cat <<EOF
+          Ты независимый ревьюер pull request #$PR в репозитории $GITHUB_REPOSITORY.
+          Версия для ревью: head SHA $HEAD_SHA, базовая ветка origin/$BASE_REF. Код не меняй.
+
+          1. Прочитай критерии ревью в REVIEW.md, правила в AGENTS.md и docs/agents/issue-tracker.md.
+          2. Прочитай PR: gh pr view $PR --json title,body,author,commits,files,comments,reviews.
+          3. По ссылкам из описания прочитай исходное обращение, спецификацию, тикеты и комментарий
+             с согласованием: gh issue view <номер> --json number,title,body,labels,comments.
+             Если ссылок нет или изменение выходит за согласованный объём, отметь это.
+          4. Изучи изменения: git diff origin/$BASE_REF...HEAD и файлы целиком там, где нужен контекст.
+          5. Результаты CI на этом SHA (имя, статус, итог, ссылка) — в файле $RUNNER_TEMP/ci.tsv.
+             Если проверки ещё идут, так и напиши.
+          6. Учти предыдущие комментарии PR: разобранные человеком замечания заново не поднимай.
+
+          Ответ — готовый текст комментария в Markdown на русском, без вступления:
+          раздел «Соответствие спецификации», раздел «Замечания» в формате из REVIEW.md
+          (файл:строка, условия, последствие, уровень) или фраза «Подтверждённых дефектов не найдено»,
+          раздел «CI». Не упоминай пользователей и приложения через @.
+          EOF
+          )
+          claude -p "$prompt" \
+            --model claude-sonnet-5-5 \
+            --max-turns 40 \
+            --output-format json \
+            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
+            --disallowedTools "Edit,Write,NotebookEdit,WebFetch,WebSearch" \
+            > "$RUNNER_TEMP/result.json"
+          jq -e '.is_error | not' "$RUNNER_TEMP/result.json" > /dev/null
+          jq -r '.result' "$RUNNER_TEMP/result.json" > "$RUNNER_TEMP/review.md"
+          delimiter="EOF_$(openssl rand -hex 8)"
+          {
+            echo "body<<$delimiter"
+            cat "$RUNNER_TEMP/review.md"
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+
+  # Публикация без модели: только это задание получает право писать в PR.
+  publish:
+    needs: review
+    # Отмена из-за нового push не публикуется: ревью устаревшей версии не нужно.
+    if: ${{ !cancelled() && needs.review.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      RESULT: ${{ needs.review.result }}
+      BODY: ${{ needs.review.outputs.body }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Comment on PR
+        run: |
+          set -eu
+          {
+            echo "## Авторевью"
+            echo
+            echo "SHA: \`$HEAD_SHA\` · критерии: REVIEW.md · [лог прогона]($RUN_URL)"
+            echo
+            if [ "$RESULT" = success ] && [ -n "$BODY" ]; then
+              printf '%s\n' "$BODY"
+            else
+              echo "Авторевью не выполнено (\`$RESULT\`): подробности в логе прогона. Нужен человек."
+            fi
+            echo
+            echo "> *Авторевью только оставляет замечания. Исправление делает агент по команде человека в комментарии.*"
+          } > comment.md
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md
