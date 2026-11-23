@@ -53,11 +53,11 @@ jobs:
       # CI запускается параллельно на push. Ревью ждёт его до 12 минут, чтобы прочитать итог;
       # если CI не успел, в отчёт попадает текущее состояние проверок.
       # Check-run появляются не одновременно, поэтому ожидание заканчивается, только когда
-      # есть все проверки из REQUIRED_CHECKS (задания ci.yml, e2e-head.yml и hexlet-check.yml) и все они завершены.
+      # есть все проверки из REQUIRED_CHECKS (задания ci.yml, e2e-head.yml, commits.yml и hexlet-check.yml) и все они завершены.
       # При новом задании в CI его имя добавляют сюда.
       - name: Wait for CI on head SHA
         env:
-          REQUIRED_CHECKS: check docker build e2e-head
+          REQUIRED_CHECKS: check docker build e2e-head commits
         run: |
           set -euo pipefail
           ci="$RUNNER_TEMP/ci.tsv"
