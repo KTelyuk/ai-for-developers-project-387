@@ -193,13 +193,17 @@ export function createHandlers({ clock, store }: HandlerDependencies) {
         'Встреча уже началась, изменить её нельзя',
       );
       const guestName = normalizeGuestName(request.body.guestName);
+      const subject = normalizeSubject(request.body.subject);
       const others = store.bookings.list().filter((booking) => booking.id !== id);
       const slot = reserveSlot(request.body, now, others);
+      // Замена целиком: предмет, не переданный в теле, очищается, а не остаётся прежним.
+      const { subject: _previous, ...rest } = current;
       const record: StoredBooking = {
-        ...current,
+        ...rest,
         eventTypeId: request.body.eventTypeId,
         guestName,
         guestEmail: request.body.guestEmail,
+        ...(subject === undefined ? {} : { subject }),
         startAt: slot.startAt,
         endAt: slot.endAt,
       };

@@ -129,8 +129,10 @@ export function mockGuestBookingApi({
       if (updateError) return errorReply(updateError);
       const minutes = eventTypes.find((item) => item.id === body.eventTypeId)?.durationMinutes ?? 0;
       const endAt = new Date(Date.parse(body.startAt) + minutes * 60_000);
+      // Замена целиком, как на сервере: не переданный предмет разговора очищается.
+      const { subject: _previous, ...rest } = current;
       current = {
-        ...current,
+        ...rest,
         ...body,
         // Ответ в часовом поясе Алматы, как у сервера.
         endAt: `${new Date(endAt.getTime() + 5 * 3_600_000).toISOString().slice(0, 19)}+05:00`,

@@ -224,4 +224,72 @@ describe('изменение записи гостем', () => {
     expectMatchesContract('put', PATH, response);
     expect(response.json()).toMatchObject({ code: 'ALREADY_STARTED' });
   });
+
+  describe('предмет разговора', () => {
+    it('меняется, ссылка прежняя, список владельца видит новый текст', async () => {
+      const { id, token } = await setUp();
+      await update(id, token, { subject: 'Старый' });
+
+      const response = await update(id, token, { subject: '  Новый\nс переносом ' });
+
+      expect(response.statusCode).toBe(200);
+      expectMatchesContract('put', PATH, response);
+      expect(response.json().subject).toBe('Новый\nс переносом');
+      expect((await getBooking(id, token)).json().subject).toBe('Новый\nс переносом');
+    });
+
+    it('добавляется к записи, созданной без него', async () => {
+      const { id, token } = await setUp();
+      expect((await getBooking(id, token)).json()).not.toHaveProperty('subject');
+
+      const response = await update(id, token, { subject: 'Позже дополнил' });
+
+      expect(response.json().subject).toBe('Позже дополнил');
+    });
+
+    it.each([
+      ['без поля', undefined],
+      ['пустая строка', ''],
+      ['одни пробелы', '  \n '],
+    ])('очищается: %s', async (_name, subject) => {
+      const { id, token } = await setUp();
+      await update(id, token, { subject: 'Был' });
+
+      const response = await update(id, token, subject === undefined ? {} : { subject });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).not.toHaveProperty('subject');
+      expect((await getBooking(id, token)).json()).not.toHaveProperty('subject');
+    });
+
+    it('501 символ — 400, прежний предмет остаётся; 500 — принято', async () => {
+      const { id, token } = await setUp();
+      await update(id, token, { subject: 'Был' });
+
+      const rejected = await update(id, token, { subject: 'я'.repeat(501) });
+      expect(rejected.statusCode).toBe(400);
+      expect(rejected.json().code).toBe('VALIDATION_ERROR');
+      expect((await getBooking(id, token)).json().subject).toBe('Был');
+
+      expect((await update(id, token, { subject: 'я'.repeat(500) })).statusCode).toBe(200);
+    });
+
+    it('409 SLOT_TAKEN: прежняя запись с прежним предметом нетронута', async () => {
+      const { id, token } = await setUp();
+      await update(id, token, { subject: 'Был' });
+      await book('2026-11-17T11:00:00+05:00', 'Борис');
+
+      const response = await update(id, token, {
+        eventTypeId: CONSULTATION.id,
+        startAt: '2026-11-17T10:30:00+05:00',
+        subject: 'Не сохранится',
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect((await getBooking(id, token)).json()).toMatchObject({
+        subject: 'Был',
+        startAt: START,
+      });
+    });
+  });
 });
