@@ -82,6 +82,7 @@ export function BookPage({ rebooking }: { rebooking?: Rebooking }) {
     rebooking && {
       guestName: rebooking.booking.guestName,
       guestEmail: rebooking.booking.guestEmail,
+      subject: rebooking.booking.subject ?? '',
     },
   );
   const chosenSlot = slot && momentDate(slot.startAt) === selectedDate ? slot : undefined;

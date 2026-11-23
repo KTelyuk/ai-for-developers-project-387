@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw/http';
 import { describe, expect, it } from 'vitest';
-import { BOOKING_ID, BOOKING_TOKEN, mockGuestBookingApi } from '@/test/bookings.ts';
+import { BOOKING_ID, BOOKING_TOKEN, guestBooking, mockGuestBookingApi } from '@/test/bookings.ts';
 import { consultation } from '@/test/event-types.ts';
 import { server } from '@/test/msw.ts';
 import { renderAt } from '@/test/render.tsx';
@@ -20,6 +20,29 @@ describe('страница записи', () => {
     expect(region).toHaveTextContent('09:00–10:00');
     expect(region).toHaveTextContent('Время указано по Алматы (UTC+5)');
     expect(region).toHaveTextContent('Анна');
+  });
+
+  it('показывает предмет разговора с переносами строк как обычный текст', async () => {
+    mockGuestBookingApi({
+      eventType: consultation,
+      initial: { ...guestBooking, subject: 'Первое <b>тут</b>\nВторое' },
+    });
+    renderAt(PAGE);
+
+    const region = await screen.findByRole('region', { name: 'Ваша запись' });
+    const subject = await within(region).findByText(/Первое/);
+    expect(subject).toHaveTextContent('Первое <b>тут</b> Второе');
+    expect(subject.textContent).toBe('Первое <b>тут</b>\nВторое');
+    expect(region.querySelector('b')).toBeNull();
+  });
+
+  it('без предмета разговора блока нет', async () => {
+    mockGuestBookingApi({ eventType: consultation });
+    renderAt(PAGE);
+
+    const region = await screen.findByRole('region', { name: 'Ваша запись' });
+    await within(region).findByText('Консультация');
+    expect(region).not.toHaveTextContent('Предмет разговора');
   });
 
   it('неверный токен — запись недоступна, отменить нечего', async () => {

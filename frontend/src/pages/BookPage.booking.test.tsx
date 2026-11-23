@@ -170,4 +170,72 @@ describe('страница бронирования: запись', () => {
       },
     ]);
   });
+
+  it('предмет разговора: необязательное поле, обрезка, показ на экране «Вы записаны»', async () => {
+    const user = userEvent.setup();
+    mockEventTypesApi([consultation]);
+    const { created } = mockBookingApi({ slots: { '2026-11-17': [slot('09:00', '10:00')] } });
+    renderAt(DAY);
+    await chooseTime(user, '09:00');
+
+    expect(screen.getByLabelText(/Предмет разговора/)).toHaveAccessibleName(
+      'Предмет разговора (необязательно)',
+    );
+    await user.type(screen.getByLabelText('Имя'), 'Анна');
+    await user.type(screen.getByLabelText('Email'), 'anna@example.com');
+    await user.type(
+      screen.getByLabelText(/Предмет разговора/),
+      '  Обсудить <b>проект</b>\nи сроки ',
+    );
+    await user.click(screen.getByRole('button', { name: 'Записаться' }));
+
+    const confirmation = await screen.findByRole('region', { name: 'Вы записаны' });
+    expect(created[0]?.subject).toBe('Обсудить <b>проект</b>\nи сроки');
+    expect(within(confirmation).getByText(/Обсудить/)).toHaveTextContent(
+      'Обсудить <b>проект</b> и сроки',
+    );
+    expect(confirmation.querySelector('b')).toBeNull();
+  });
+
+  it('без предмета разговора поле не уходит на сервер и блока на экране нет', async () => {
+    const user = userEvent.setup();
+    mockEventTypesApi([consultation]);
+    const { created } = mockBookingApi({ slots: { '2026-11-17': [slot('09:00', '10:00')] } });
+    renderAt(DAY);
+    await chooseTime(user, '09:00');
+    await user.type(screen.getByLabelText('Имя'), 'Анна');
+    await user.type(screen.getByLabelText('Email'), 'anna@example.com');
+    await user.type(screen.getByLabelText(/Предмет разговора/), '   ');
+    await user.click(screen.getByRole('button', { name: 'Записаться' }));
+
+    const confirmation = await screen.findByRole('region', { name: 'Вы записаны' });
+    expect(created[0]).not.toHaveProperty('subject');
+    expect(confirmation).not.toHaveTextContent('Предмет разговора');
+  });
+
+  it('предмет длиннее 500 символов — ошибка под полем, запрос не уходит, текст остаётся', async () => {
+    const user = userEvent.setup();
+    mockEventTypesApi([consultation]);
+    const { created } = mockBookingApi({ slots: { '2026-11-17': [slot('09:00', '10:00')] } });
+    renderAt(DAY);
+    await chooseTime(user, '09:00');
+    await user.type(screen.getByLabelText('Имя'), 'Анна');
+    await user.type(screen.getByLabelText('Email'), 'anna@example.com');
+    await user.click(screen.getByLabelText(/Предмет разговора/));
+    await user.paste('я'.repeat(501));
+    await user.click(screen.getByRole('button', { name: 'Записаться' }));
+
+    expect(screen.getByLabelText(/Предмет разговора/)).toHaveAccessibleDescription(
+      'Не длиннее 500 символов',
+    );
+    expect(screen.getByLabelText(/Предмет разговора/)).toHaveValue('я'.repeat(501));
+    expect(created).toEqual([]);
+
+    await user.clear(screen.getByLabelText(/Предмет разговора/));
+    await user.click(screen.getByLabelText(/Предмет разговора/));
+    await user.paste('я'.repeat(500));
+    await user.click(screen.getByRole('button', { name: 'Записаться' }));
+    expect(await screen.findByRole('region', { name: 'Вы записаны' })).toBeInTheDocument();
+    expect(created[0]?.subject).toHaveLength(500);
+  });
 });

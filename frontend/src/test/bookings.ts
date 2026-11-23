@@ -47,6 +47,7 @@ export function mockBookingApi({
           eventTypeId: body.eventTypeId,
           guestName: body.guestName,
           guestEmail: body.guestEmail,
+          ...(body.subject ? { subject: body.subject } : {}),
           startAt: body.startAt,
           endAt: slot?.endAt ?? body.startAt,
           createdAt: '2026-11-16T10:00:00+05:00',
@@ -86,14 +87,17 @@ export function mockGuestBookingApi({
   eventTypes = [eventType],
   cancelError,
   updateError,
+  initial = guestBooking,
 }: {
   eventType: EventType;
   eventTypes?: EventType[];
   cancelError?: ErrorReply;
   updateError?: ErrorReply;
+  // Запись до теста: по умолчанию `guestBooking`, например с предметом разговора.
+  initial?: Booking;
 }) {
   let exists = true;
-  let current = guestBooking;
+  let current = initial;
   const cancelled: string[] = [];
   const updated: CreateBooking[] = [];
   function denied(id: unknown, request: Request) {

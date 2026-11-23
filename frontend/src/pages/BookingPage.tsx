@@ -7,6 +7,7 @@ import {
   getEventTypeOptions,
 } from '@/api/@tanstack/react-query.gen.ts';
 import { NotFoundOutcome, Outcome, UnavailableOutcome } from '@/components/BookingOutcome.tsx';
+import { BookingSubject } from '@/components/BookingSubject.tsx';
 import { LoadError, Loading } from '@/components/LoadState.tsx';
 import { Button } from '@/components/ui/button.tsx';
 import { errorCode } from '@/lib/bookings.ts';
@@ -61,7 +62,7 @@ export function BookingPage() {
     );
   }
 
-  const { startAt, endAt, guestName, guestEmail } = booking.data;
+  const { startAt, endAt, guestName, guestEmail, subject } = booking.data;
   const editPath = `/bookings/${id}/edit?${new URLSearchParams({
     token,
     eventType: eventTypeId,
@@ -91,6 +92,14 @@ export function BookingPage() {
           <dd className="break-words">{guestName}</dd>
           <dt className="text-muted-foreground">Email</dt>
           <dd className="break-words">{guestEmail}</dd>
+          {subject ? (
+            <>
+              <dt className="text-muted-foreground">Предмет разговора</dt>
+              <dd>
+                <BookingSubject subject={subject} />
+              </dd>
+            </>
+          ) : null}
         </dl>
         <p className="text-sm text-muted-foreground">{OWNER_TIME_ZONE_LABEL}</p>
 

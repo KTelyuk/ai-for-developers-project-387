@@ -44,6 +44,7 @@ type BookingBody = {
   startAt?: string;
   guestName?: string;
   guestEmail?: string;
+  subject?: string;
 };
 
 function book(body: BookingBody) {
@@ -236,5 +237,65 @@ describe('бронирование', () => {
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'NOT_FOUND' });
     expectMatchesContract('post', '/api/bookings', response);
+  });
+});
+
+describe('предмет разговора', () => {
+  const subjectOf = async (subject?: string) => {
+    app = buildTestApp({ store: storeWithEventTypes() });
+    return book(subject === undefined ? {} : { subject });
+  };
+
+  it('сохраняется в записи и отдаётся в ответе и на странице записи', async () => {
+    const response = await subjectOf('Обсудить проект');
+    expect(response.statusCode).toBe(201);
+    const { booking, token } = response.json();
+    expect(booking.subject).toBe('Обсудить проект');
+    const read = await app.inject({
+      method: 'GET',
+      url: `/api/bookings/${booking.id}?token=${token}`,
+    });
+    expect(read.json().subject).toBe('Обсудить проект');
+  });
+
+  it('пробелы по краям обрезаются, переносы строк внутри сохраняются', async () => {
+    const response = await subjectOf('  первое\n\nвторое  ');
+    expect(response.json().booking.subject).toBe('первое\n\nвторое');
+  });
+
+  it('ровно 500 символов принимаются, 501 — 400 VALIDATION_ERROR без записи', async () => {
+    expect((await subjectOf('я'.repeat(500))).statusCode).toBe(201);
+    await app.close();
+    app = buildTestApp({ store: storeWithEventTypes() });
+    const rejected = await book({ subject: 'я'.repeat(501) });
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json().code).toBe('VALIDATION_ERROR');
+    const slots = await getSlots('2026-11-17');
+    expect(slots.json().map((slot: { startAt: string }) => slot.startAt)).toContain(
+      '2026-11-17T09:00:00+05:00',
+    );
+  });
+
+  it('500 символов с пробелами по краям принимаются: длина считается после обрезки', async () => {
+    expect((await subjectOf(`  ${'я'.repeat(500)}  `)).statusCode).toBe(201);
+  });
+
+  it('без поля и из одних пробелов поля у записи нет', async () => {
+    for (const subject of [undefined, '', '   \n ']) {
+      const response = await subjectOf(subject);
+      expect(response.statusCode).toBe(201);
+      expect(response.json().booking).not.toHaveProperty('subject');
+      await app.close();
+    }
+    app = buildTestApp({ store: storeWithEventTypes() });
+  });
+
+  it('при 409 предмет не сохраняется', async () => {
+    const store = storeWithEventTypes();
+    app = buildTestApp({ store });
+    await book({});
+    const taken = await book({ guestName: 'Борис', subject: 'Второй' });
+    expect(taken.statusCode).toBe(409);
+    expect(store.bookings.list()).toHaveLength(1);
   });
 });

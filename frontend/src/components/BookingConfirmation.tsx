@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import type { BookingCreated, EventType } from '@/api';
+import { BookingSubject } from '@/components/BookingSubject.tsx';
 import { Button } from '@/components/ui/button.tsx';
 import { Input } from '@/components/ui/input.tsx';
 import { Label } from '@/components/ui/label.tsx';
@@ -44,6 +45,14 @@ export function BookingConfirmation({
         <dd>{formatMomentDay(booking.startAt)}</dd>
         <dt className="text-muted-foreground">Время</dt>
         <dd>{formatTimeRange(booking.startAt, booking.endAt)}</dd>
+        {booking.subject ? (
+          <>
+            <dt className="text-muted-foreground">Предмет разговора</dt>
+            <dd>
+              <BookingSubject subject={booking.subject} />
+            </dd>
+          </>
+        ) : null}
       </dl>
       <p className="text-sm text-muted-foreground">{OWNER_TIME_ZONE_LABEL}</p>
       <div className="flex flex-col gap-2">

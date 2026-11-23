@@ -74,6 +74,7 @@ describe('страница бронирования: время успели з�
     await chooseTime(user, '09:00');
     await user.type(screen.getByLabelText('Имя'), 'Анна');
     await user.type(screen.getByLabelText('Email'), 'anna@example.com');
+    await user.type(screen.getByLabelText(/Предмет разговора/), 'Обсудить проект');
     await user.click(screen.getByRole('button', { name: 'Записаться' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -91,6 +92,7 @@ describe('страница бронирования: время успели з�
     await user.click(within(list).getByRole('button', { name: '10:00' }));
     expect(screen.getByLabelText('Имя')).toHaveValue('Анна');
     expect(screen.getByLabelText('Email')).toHaveValue('anna@example.com');
+    expect(screen.getByLabelText(/Предмет разговора/)).toHaveValue('Обсудить проект');
     await user.click(screen.getByRole('button', { name: 'Записаться' }));
 
     expect(await screen.findByRole('region', { name: 'Вы записаны' })).toBeInTheDocument();
@@ -98,6 +100,10 @@ describe('страница бронирования: время успели з�
       '2026-11-17T09:00:00+05:00',
       '2026-11-17T10:00:00+05:00',
     ]);
-    expect(created[1]).toMatchObject({ guestName: 'Анна', guestEmail: 'anna@example.com' });
+    expect(created[1]).toMatchObject({
+      guestName: 'Анна',
+      guestEmail: 'anna@example.com',
+      subject: 'Обсудить проект',
+    });
   });
 });
