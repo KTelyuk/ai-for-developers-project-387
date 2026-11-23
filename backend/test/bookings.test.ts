@@ -276,6 +276,17 @@ describe('предмет разговора', () => {
     );
   });
 
+  it('длина считается в символах: 500 эмодзи принимаются, 501 — 400 VALIDATION_ERROR', async () => {
+    const accepted = await subjectOf('😀'.repeat(500));
+    expect(accepted.statusCode).toBe(201);
+    expect(accepted.json().booking.subject).toBe('😀'.repeat(500));
+    await app.close();
+    app = buildTestApp({ store: storeWithEventTypes() });
+    const rejected = await book({ subject: '😀'.repeat(501) });
+    expect(rejected.statusCode).toBe(400);
+    expect(rejected.json().code).toBe('VALIDATION_ERROR');
+  });
+
   it('500 символов с пробелами по краям принимаются: длина считается после обрезки', async () => {
     expect((await subjectOf(`  ${'я'.repeat(500)}  `)).statusCode).toBe(201);
   });

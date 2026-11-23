@@ -20,7 +20,13 @@ export const bookingFormSchema = z.object({
     .regex(EMAIL_PATTERN, 'Введите email в формате name@example.com')
     .max(EMAIL_MAX_LENGTH, `Не длиннее ${EMAIL_MAX_LENGTH} символов`),
   // Пустая строка после обрезки равна отсутствию поля: в тело запроса она не попадает.
-  subject: z.string().trim().max(SUBJECT_MAX_LENGTH, `Не длиннее ${SUBJECT_MAX_LENGTH} символов`),
+  // Длина считается в символах (code points), как на сервере: эмодзи — один символ, а не два.
+  subject: z
+    .string()
+    .trim()
+    .refine((value) => [...value].length <= SUBJECT_MAX_LENGTH, {
+      message: `Не длиннее ${SUBJECT_MAX_LENGTH} символов`,
+    }),
 });
 
 export type BookingFormValues = z.infer<typeof bookingFormSchema>;

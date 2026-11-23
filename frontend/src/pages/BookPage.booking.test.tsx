@@ -238,4 +238,29 @@ describe('страница бронирования: запись', () => {
     expect(await screen.findByRole('region', { name: 'Вы записаны' })).toBeInTheDocument();
     expect(created[0]?.subject).toHaveLength(500);
   });
+
+  it('длина предмета считается в символах: 500 эмодзи принимаются, 501 — ошибка', async () => {
+    const user = userEvent.setup();
+    mockEventTypesApi([consultation]);
+    const { created } = mockBookingApi({ slots: { '2026-11-17': [slot('09:00', '10:00')] } });
+    renderAt(DAY);
+    await chooseTime(user, '09:00');
+    await user.type(screen.getByLabelText('Имя'), 'Анна');
+    await user.type(screen.getByLabelText('Email'), 'anna@example.com');
+    await user.click(screen.getByLabelText(/Предмет разговора/));
+    await user.paste('😀'.repeat(501));
+    await user.click(screen.getByRole('button', { name: 'Записаться' }));
+
+    expect(screen.getByLabelText(/Предмет разговора/)).toHaveAccessibleDescription(
+      'Не длиннее 500 символов',
+    );
+    expect(created).toEqual([]);
+
+    await user.clear(screen.getByLabelText(/Предмет разговора/));
+    await user.click(screen.getByLabelText(/Предмет разговора/));
+    await user.paste('😀'.repeat(500));
+    await user.click(screen.getByRole('button', { name: 'Записаться' }));
+    expect(await screen.findByRole('region', { name: 'Вы записаны' })).toBeInTheDocument();
+    expect([...(created[0]?.subject ?? '')]).toHaveLength(500);
+  });
 });

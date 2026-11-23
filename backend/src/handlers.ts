@@ -57,11 +57,12 @@ function normalizeGuestName(name: string): string {
 
 const SUBJECT_MAX_LENGTH = 500;
 
-// Предмет разговора необязателен: пустой после обрезки равен отсутствию. Длина — после обрезки.
+// Предмет разговора необязателен: пустой после обрезки равен отсутствию.
+// Длина — после обрезки и в символах (code points), а не в единицах UTF-16: эмодзи считается за один.
 function normalizeSubject(subject: string | undefined): string | undefined {
   const trimmed = subject?.trim();
   if (trimmed === undefined || trimmed === '') return undefined;
-  if (trimmed.length > SUBJECT_MAX_LENGTH) {
+  if ([...trimmed].length > SUBJECT_MAX_LENGTH) {
     throw new ApiError(400, 'VALIDATION_ERROR', 'Предмет разговора не длиннее 500 символов');
   }
   return trimmed;
