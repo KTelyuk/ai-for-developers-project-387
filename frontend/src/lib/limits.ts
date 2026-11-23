@@ -12,5 +12,7 @@ export const DESCRIPTION_MAX_LENGTH = 500;
 
 // Имя гостя: 1–100 символов после обрезки по краям. Email — `local@domain`, до 254 символов.
 export const GUEST_NAME_MAX_LENGTH = 100;
+// Предмет разговора: необязателен, до 500 символов после обрезки по краям.
+export const SUBJECT_MAX_LENGTH = 500;
 export const EMAIL_MAX_LENGTH = 254;
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+$/;

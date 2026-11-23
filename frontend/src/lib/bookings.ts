@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import type { ApiError } from '@/api';
-import { EMAIL_MAX_LENGTH, EMAIL_PATTERN, GUEST_NAME_MAX_LENGTH } from '@/lib/limits.ts';
+import {
+  EMAIL_MAX_LENGTH,
+  EMAIL_PATTERN,
+  GUEST_NAME_MAX_LENGTH,
+  SUBJECT_MAX_LENGTH,
+} from '@/lib/limits.ts';
 
 // Имя проверяется после обрезки по краям, как на сервере; email — `local@domain`.
 export const bookingFormSchema = z.object({
@@ -14,6 +19,14 @@ export const bookingFormSchema = z.object({
     .trim()
     .regex(EMAIL_PATTERN, 'Введите email в формате name@example.com')
     .max(EMAIL_MAX_LENGTH, `Не длиннее ${EMAIL_MAX_LENGTH} символов`),
+  // Пустая строка после обрезки равна отсутствию поля: в тело запроса она не попадает.
+  // Длина считается в символах (code points), как на сервере: эмодзи — один символ, а не два.
+  subject: z
+    .string()
+    .trim()
+    .refine((value) => [...value].length <= SUBJECT_MAX_LENGTH, {
+      message: `Не длиннее ${SUBJECT_MAX_LENGTH} символов`,
+    }),
 });
 
 export type BookingFormValues = z.infer<typeof bookingFormSchema>;

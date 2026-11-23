@@ -6,6 +6,7 @@ import type { CreateBooking, EventType, Slot } from '@/api';
 import { Button } from '@/components/ui/button.tsx';
 import { Input } from '@/components/ui/input.tsx';
 import { Label } from '@/components/ui/label.tsx';
+import { Textarea } from '@/components/ui/textarea.tsx';
 import { type BookingFormValues, bookingFormSchema, errorCode } from '@/lib/bookings.ts';
 import { formatMomentDay, formatTimeRange } from '@/lib/format.ts';
 
@@ -15,7 +16,7 @@ type Props = {
   // Отправка на сервер: новая бронь или изменение записи. Ошибка сервера — отклонённый промис.
   save: (body: CreateBooking) => Promise<void>;
   submitLabel: string;
-  // Имя и email из прошлой попытки: после конфликта гость не вводит их заново.
+  // Имя, email и предмет разговора из прошлой попытки: после конфликта гость не вводит их заново.
   defaultValues?: BookingFormValues;
   // Время перестало быть свободным: страница возвращает гостя к обновлённым слотам с его данными.
   onSlotGone: (message: string, values: BookingFormValues) => void;
@@ -39,7 +40,7 @@ function serverErrorMessage(code: string | undefined) {
 export function BookingForm({
   eventType,
   slot,
-  defaultValues = { guestName: '', guestEmail: '' },
+  defaultValues = { guestName: '', guestEmail: '', subject: '' },
   save,
   submitLabel,
   onSlotGone,
@@ -65,7 +66,13 @@ export function BookingForm({
 
   const submit = handleSubmit(async (values) => {
     try {
-      await book.mutateAsync({ eventTypeId: eventType.id, startAt: slot.startAt, ...values });
+      const { subject, ...guest } = values;
+      await book.mutateAsync({
+        eventTypeId: eventType.id,
+        startAt: slot.startAt,
+        ...guest,
+        ...(subject === '' ? {} : { subject }),
+      });
     } catch (error) {
       if (SLOT_GONE_CODES.includes(errorCode(error) ?? '')) onSlotGone(SLOT_GONE_MESSAGE, values);
     }
@@ -88,6 +95,7 @@ export function BookingForm({
   };
   const name = fieldError('guestName');
   const email = fieldError('guestEmail');
+  const subject = fieldError('subject');
 
   return (
     <form
@@ -129,6 +137,20 @@ export function BookingForm({
           {...register('guestEmail')}
         />
         {email.error}
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${id}-subject`}>
+          Предмет разговора{' '}
+          <span className="font-normal text-muted-foreground">(необязательно)</span>
+        </Label>
+        <Textarea
+          id={`${id}-subject`}
+          rows={3}
+          aria-invalid={subject['aria-invalid']}
+          aria-describedby={subject['aria-describedby']}
+          {...register('subject')}
+        />
+        {subject.error}
       </div>
       {showServerError ? (
         <p role="alert" className="text-sm text-destructive">

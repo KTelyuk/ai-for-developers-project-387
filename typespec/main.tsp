@@ -156,6 +156,9 @@ model Booking {
   eventTypeId: string;
   guestName: string;
   guestEmail: string;
+
+  // Предмет разговора: необязательный текст гостя, до 500 символов; у записи без него поля нет.
+  subject?: string;
   startAt: offsetDateTime;
   endAt: offsetDateTime;
   createdAt: offsetDateTime;
@@ -173,6 +176,11 @@ model CreateBooking {
   @maxLength(254)
   @pattern("^[^\\s@]+@[^\\s@]+$")
   guestEmail: string;
+
+  // Предмет разговора. Сервер обрезает пробелы по краям, затем требует не более 500 символов
+  // (400 VALIDATION_ERROR); пустая строка после обрезки равна отсутствию поля. Переносы строк
+  // внутри сохраняются. Длину схема не ограничивает — по той же причине, что у имени.
+  subject?: string;
 }
 
 // Ответ на бронирование: запись, токен отмены и ссылка на страницу записи
@@ -225,7 +233,8 @@ interface GuestBookings {
   @operationId("getBooking")
   get(@path id: string, @query token: string): Booking | NotFoundError | InvalidTokenError;
 
-  // Изменение гостем: тип встречи, время, имя и email заменяются целиком, тело — как у брони.
+  // Изменение гостем: тип встречи, время, имя и email заменяются целиком, тело — как у брони; поле `subject`, не
+  // переданное в теле, очищает предмет разговора.
   // Ссылка, токен и `createdAt` прежние, `endAt` — по длительности нового типа встречи.
   // Встреча уже началась — 409 ALREADY_STARTED; `startAt` не слот — 400 SLOT_UNAVAILABLE;
   // время занято другой записью — 409 SLOT_TAKEN (сама изменяемая запись время не занимает).

@@ -2,7 +2,13 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Slot } from '@/api';
-import { BOOKING_ID, BOOKING_TOKEN, mockBookingApi, mockGuestBookingApi } from '@/test/bookings.ts';
+import {
+  BOOKING_ID,
+  BOOKING_TOKEN,
+  guestBooking,
+  mockBookingApi,
+  mockGuestBookingApi,
+} from '@/test/bookings.ts';
 import { consultation, intro, mockEventTypesApi } from '@/test/event-types.ts';
 import { renderAt } from '@/test/render.tsx';
 
@@ -110,16 +116,66 @@ describe('изменение записи гостем', () => {
 
   it('время уже заняли — сообщение и слоты, данные гостя сохранены', async () => {
     const user = userEvent.setup();
-    mockApi({ updateError: { status: 409, code: 'SLOT_TAKEN', message: 'Это время уже занято' } });
+    mockApi({
+      initial: { ...guestBooking, subject: 'Старый' },
+      updateError: { status: 409, code: 'SLOT_TAKEN', message: 'Это время уже занято' },
+    });
     renderAt(EDIT);
     await chooseTime(user, '11:00');
     await user.clear(screen.getByLabelText('Имя'));
     await user.type(screen.getByLabelText('Имя'), 'Анна П.');
+    await user.type(screen.getByLabelText(/Предмет разговора/), ' дополнение');
     await user.click(screen.getByRole('button', { name: 'Сохранить изменения' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Это время уже заняли');
     await chooseTime(user, '11:00');
     expect(screen.getByLabelText('Имя')).toHaveValue('Анна П.');
+    expect(screen.getByLabelText(/Предмет разговора/)).toHaveValue('Старый дополнение');
+  });
+
+  it('форма открывается с предметом разговора; его можно изменить вместе со временем', async () => {
+    const user = userEvent.setup();
+    const { updated } = mockApi({ initial: { ...guestBooking, subject: 'Старый предмет' } });
+    renderAt(EDIT);
+    await chooseTime(user, '11:00');
+
+    const subject = screen.getByLabelText(/Предмет разговора/);
+    expect(subject).toHaveValue('Старый предмет');
+    await user.clear(subject);
+    await user.type(subject, 'Новый предмет');
+    await user.click(screen.getByRole('button', { name: 'Сохранить изменения' }));
+
+    const region = await screen.findByRole('region', { name: 'Ваша запись' });
+    expect(updated[0]?.subject).toBe('Новый предмет');
+    expect(region).toHaveTextContent('Новый предмет');
+  });
+
+  it('очищенный предмет уходит без поля, на странице записи блока нет', async () => {
+    const user = userEvent.setup();
+    const { updated } = mockApi({ initial: { ...guestBooking, subject: 'Старый предмет' } });
+    renderAt(EDIT);
+    await chooseTime(user, '11:00');
+    await user.clear(screen.getByLabelText(/Предмет разговора/));
+    await user.click(screen.getByRole('button', { name: 'Сохранить изменения' }));
+
+    const region = await screen.findByRole('region', { name: 'Ваша запись' });
+    expect(updated[0]).not.toHaveProperty('subject');
+    expect(region).not.toHaveTextContent('Предмет разговора');
+  });
+
+  it('предмет можно добавить к записи, созданной без него', async () => {
+    const user = userEvent.setup();
+    const { updated } = mockApi();
+    renderAt(EDIT);
+    await chooseTime(user, '11:00');
+    expect(screen.getByLabelText(/Предмет разговора/)).toHaveValue('');
+    await user.type(screen.getByLabelText(/Предмет разговора/), 'Добавил позже');
+    await user.click(screen.getByRole('button', { name: 'Сохранить изменения' }));
+
+    expect(await screen.findByRole('region', { name: 'Ваша запись' })).toHaveTextContent(
+      'Добавил позже',
+    );
+    expect(updated[0]?.subject).toBe('Добавил позже');
   });
 
   it('встреча началась, пока гость выбирал — сообщение в форме', async () => {

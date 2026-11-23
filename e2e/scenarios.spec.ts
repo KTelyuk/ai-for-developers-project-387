@@ -171,6 +171,48 @@ test('гость меняет время записи по ссылке, и вл
   await expect(item).not.toContainText(`${time}–`);
 });
 
+test('гость записывается с предметом разговора, меняет его, и владелец видит текст', async ({
+  page,
+  request,
+  uniqueTitle,
+}) => {
+  const { title } = await createEventType(request, uniqueTitle('Предмет'), 15);
+  await openFirstFreeDay(page, title);
+  await chooseFirstSlot(page);
+  const form = page.getByRole('form', { name: 'Ваши данные' });
+  await form.getByLabel('Имя').fill(ANNA.name);
+  await form.getByLabel('Email').fill(ANNA.email);
+  await form.getByLabel(/Предмет разговора/).fill('Обсудить проект\nи сроки запуска');
+  await form.getByRole('button', { name: 'Записаться' }).click();
+  const confirmation = page.getByRole('region', { name: 'Вы записаны' });
+  await expect(confirmation).toContainText('Обсудить проект');
+  const link = await confirmation.getByLabel('Ссылка на запись').inputValue();
+
+  const ownerItem = () =>
+    page
+      .getByRole('list', { name: 'Встречи' })
+      .getByRole('listitem')
+      .filter({ has: page.getByRole('heading', { name: title }) });
+  await page.goto('/admin/bookings');
+  await expect(ownerItem()).toContainText('Обсудить проект');
+  await expect(ownerItem()).toContainText('и сроки запуска');
+
+  await page.goto(link);
+  await page.getByRole('link', { name: 'Изменить' }).click();
+  await chooseFirstSlot(page);
+  const editForm = page.getByRole('form', { name: 'Ваши данные' });
+  await expect(editForm.getByLabel(/Предмет разговора/)).toHaveValue(
+    'Обсудить проект\nи сроки запуска',
+  );
+  await editForm.getByLabel(/Предмет разговора/).fill('Новая тема');
+  await editForm.getByRole('button', { name: 'Сохранить изменения' }).click();
+  await expect(page.getByRole('region', { name: 'Ваша запись' })).toContainText('Новая тема');
+
+  await page.goto('/admin/bookings');
+  await expect(ownerItem()).toContainText('Новая тема');
+  await expect(ownerItem()).not.toContainText('Обсудить проект');
+});
+
 test('владелец отменяет запись из своего списка', async ({ page, request, uniqueTitle }) => {
   const { title } = await createEventType(request, uniqueTitle('Интервью'), 45);
   const { link } = await bookFirstFreeSlot(page, title, BORIS);

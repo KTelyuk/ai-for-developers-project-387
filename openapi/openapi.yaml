@@ -428,6 +428,8 @@ components:
           type: string
         guestEmail:
           type: string
+        subject:
+          type: string
         startAt:
           type: string
           format: date-time
@@ -468,6 +470,8 @@ components:
         guestName:
           type: string
         guestEmail:
+          type: string
+        subject:
           type: string
         startAt:
           type: string
@@ -510,6 +514,8 @@ components:
           type: string
           maxLength: 254
           pattern: ^[^\s@]+@[^\s@]+$
+        subject:
+          type: string
     CreateEventType:
       type: object
       required:

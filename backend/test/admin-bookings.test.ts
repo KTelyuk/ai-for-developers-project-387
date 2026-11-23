@@ -175,4 +175,37 @@ describe('отмена владельцем', () => {
     expectMatchesContract('delete', '/api/admin/bookings/{id}', response);
     expect(response.json()).toMatchObject({ code: 'NOT_FOUND' });
   });
+
+  it('отдаёт предмет разговора записи целиком, у записи без него поля нет', async () => {
+    const subject = 'Первая строка\n\nВторая строка ' + 'я'.repeat(500);
+    app = buildTestApp({ store: seededStore([{ ...ONGOING, subject }, TOMORROW]) });
+
+    const response = await listBookings();
+
+    expect(response.statusCode).toBe(200);
+    expectMatchesContract('get', '/api/admin/bookings', response);
+    const [withSubject, without] = response.json();
+    expect(withSubject.subject).toBe(subject);
+    expect(without).not.toHaveProperty('subject');
+  });
+
+  it('предмет, изменённый гостем, виден владельцу', async () => {
+    const store = seededStore([{ ...TOMORROW, subject: 'Старый' }]);
+    app = buildTestApp({ store });
+
+    const update = await app.inject({
+      method: 'PUT',
+      url: `/api/bookings/${TOMORROW.id}?token=${TOMORROW.cancelToken}`,
+      payload: {
+        eventTypeId: CONSULTATION.id,
+        startAt: TOMORROW.startAt,
+        guestName: 'Дина',
+        guestEmail: 'dina@example.com',
+        subject: 'Новый',
+      },
+    });
+
+    expect(update.statusCode).toBe(200);
+    expect((await listBookings()).json()[0].subject).toBe('Новый');
+  });
 });

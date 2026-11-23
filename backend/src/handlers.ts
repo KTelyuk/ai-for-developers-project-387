@@ -55,6 +55,19 @@ function normalizeGuestName(name: string): string {
   return trimmed;
 }
 
+const SUBJECT_MAX_LENGTH = 500;
+
+// Предмет разговора необязателен: пустой после обрезки равен отсутствию.
+// Длина — после обрезки и в символах (code points), а не в единицах UTF-16: эмодзи считается за один.
+function normalizeSubject(subject: string | undefined): string | undefined {
+  const trimmed = subject?.trim();
+  if (trimmed === undefined || trimmed === '') return undefined;
+  if ([...trimmed].length > SUBJECT_MAX_LENGTH) {
+    throw new ApiError(400, 'VALIDATION_ERROR', 'Предмет разговора не длиннее 500 символов');
+  }
+  return trimmed;
+}
+
 // Обработчики по operationId из openapi/openapi.yaml. Зависимости приходят из buildApp.
 // Форму тела, длины полей и список длительностей уже проверил fastify-openapi-glue по контракту.
 export function createHandlers({ clock, store }: HandlerDependencies) {
@@ -132,6 +145,7 @@ export function createHandlers({ clock, store }: HandlerDependencies) {
     ): BookingCreated {
       const { eventTypeId, guestEmail } = request.body;
       const guestName = normalizeGuestName(request.body.guestName);
+      const subject = normalizeSubject(request.body.subject);
       const now = clock();
       const slot = reserveSlot(request.body, now, store.bookings.list());
       // endAt берётся из длительности на момент брони: смена длительности типа его не меняет.
@@ -140,6 +154,7 @@ export function createHandlers({ clock, store }: HandlerDependencies) {
         eventTypeId,
         guestName,
         guestEmail,
+        ...(subject === undefined ? {} : { subject }),
         startAt: slot.startAt,
         endAt: slot.endAt,
         createdAt: formatOwnerTime(now.getTime()),
@@ -179,13 +194,17 @@ export function createHandlers({ clock, store }: HandlerDependencies) {
         'Встреча уже началась, изменить её нельзя',
       );
       const guestName = normalizeGuestName(request.body.guestName);
+      const subject = normalizeSubject(request.body.subject);
       const others = store.bookings.list().filter((booking) => booking.id !== id);
       const slot = reserveSlot(request.body, now, others);
+      // Замена целиком: предмет, не переданный в теле, очищается, а не остаётся прежним.
+      const { subject: _previous, ...rest } = current;
       const record: StoredBooking = {
-        ...current,
+        ...rest,
         eventTypeId: request.body.eventTypeId,
         guestName,
         guestEmail: request.body.guestEmail,
+        ...(subject === undefined ? {} : { subject }),
         startAt: slot.startAt,
         endAt: slot.endAt,
       };

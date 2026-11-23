@@ -9,6 +9,7 @@ export type AdminBooking = {
     eventTypeId: string;
     guestName: string;
     guestEmail: string;
+    subject?: string;
     startAt: string;
     endAt: string;
     createdAt: string;
@@ -25,6 +26,7 @@ export type Booking = {
     eventTypeId: string;
     guestName: string;
     guestEmail: string;
+    subject?: string;
     startAt: string;
     endAt: string;
     createdAt: string;
@@ -41,6 +43,7 @@ export type CreateBooking = {
     startAt: string;
     guestName: string;
     guestEmail: string;
+    subject?: string;
 };
 
 export type CreateEventType = {
