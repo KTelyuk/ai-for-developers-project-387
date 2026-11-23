@@ -5,6 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
 // `node backend/src/server.ts` на порту 3100 (перед этим нужен `mise run build`) и останавливает его.
 const baseURL = process.env.E2E_BASE_URL;
 const localPort = 3100;
+// Задание e2e-head в CI собирает доказательства для ревью: трассу и скриншот каждого теста.
+const evidence = process.env.E2E_EVIDENCE === '1';
 
 export default defineConfig({
   testDir: '.',
@@ -22,7 +24,8 @@ export default defineConfig({
     locale: 'ru-RU',
     // Трасса нужна для разбора падений в CI. Локально выключена: WebKit под Windows сохраняет
     // трассу второго контекста (сценарий с двумя гостями) по 20+ секунд.
-    trace: process.env.CI ? 'retain-on-failure' : 'off',
+    trace: evidence ? 'on' : process.env.CI ? 'retain-on-failure' : 'off',
+    screenshot: evidence ? 'on' : 'off',
   },
   projects: [
     {
