@@ -1,0 +1,67 @@
+name: commits
+
+# Conventional Commits в CI: заголовок PR и все коммиты ветки.
+# Локально формат проверяет commit-msg хук hk, но на раннере агента хуков нет, а при squash-мерже
+# сообщением коммита в main становится заголовок PR. Проверка та же, что в хуке:
+# `hk util check-conventional-commit`. Описание: README.md, раздел «Агент в GitHub».
+on:
+  pull_request:
+    # edited — правка заголовка PR перезапускает проверку.
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# Секреты не нужны, работает и для PR из fork.
+permissions:
+  contents: read
+
+jobs:
+  commits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # hk той же версии, что и в хуке (mise.toml).
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+
+      # Заголовок и сообщения передаются через env и файлы, а не подставляются в скрипт.
+      - name: Check PR title and commit messages
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          dir="$RUNNER_TEMP/commits"
+          mkdir -p "$dir"
+          failed=0
+          check() {
+            local label=$1 file=$2
+            if hk util check-conventional-commit "$file"; then
+              echo "ok: $label"
+            else
+              echo "::error title=Conventional Commits::$label: $(head -n 1 "$file")"
+              failed=1
+            fi
+          }
+
+          printf '%s\n' "$TITLE" > "$dir/title.txt"
+          check "заголовок PR (станет сообщением squash-коммита в main)" "$dir/title.txt"
+
+          for sha in $(git rev-list --reverse "$BASE_SHA..$HEAD_SHA"); do
+            git log -1 --format=%B "$sha" > "$dir/$sha.txt"
+            check "коммит ${sha:0:7}" "$dir/$sha.txt"
+          done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "Формат: <тип>(<область>)?: <описание>, типы — build, chore, ci, docs, feat, fix, perf, refactor, revert, style, test." \
+              "Заголовок PR правят в самом PR, коммиты — новым коммитом или rebase ветки."
+          fi
+          exit "$failed"

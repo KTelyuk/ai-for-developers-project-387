@@ -28,7 +28,7 @@ npm workspaces: `typespec/`, `backend/`, `frontend/`.
 
 ## Правила
 
-- Коммиты — [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `test:`, `docs:`, `refactor:`, `chore:`, `ci:`. Проверяет commit-msg хук hk.
+- Коммиты — [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `test:`, `docs:`, `refactor:`, `chore:`, `ci:`. Проверяет commit-msg хук hk, а в CI — задание `commits` (`.github/workflows/commits.yml`): заголовок PR, который при squash становится коммитом в `main`, и все коммиты ветки, включая коммиты агента.
 - Коммит реализации заканчивает заголовок номером issue, который он закрывает: `feat: запись на свободный слот (#12)`. GitHub превращает номер в ссылку, и по истории видно, какой коммит какую задачу делал.
 - Не изменять и не переименовывать `.github/workflows/hexlet-check.yml` — это проверка Хекслета.
 - Агент в GitHub — `.github/workflows/claude.yml`: команда `@claude` в комментарии к issue или PR от доверенного участника. На один PR — не больше 3 запусков агента (задание `gate`), сбой или исчерпание бюджета задание `report` описывает комментарием. Воркфлоу агент не правит. При изменении воркфлоу агента обновлять раздел «Агент в GitHub» в `README.md`.
