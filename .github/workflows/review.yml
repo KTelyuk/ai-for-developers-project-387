@@ -52,20 +52,63 @@ jobs:
 
       # CI запускается параллельно на push. Ревью ждёт его до 12 минут, чтобы прочитать итог;
       # если CI не успел, в отчёт попадает текущее состояние проверок.
+      # Check-run появляются не одновременно, поэтому ожидание заканчивается, только когда
+      # есть все проверки из REQUIRED_CHECKS (задания ci.yml и hexlet-check.yml) и все они завершены.
+      # При новом задании в CI его имя добавляют сюда.
       - name: Wait for CI on head SHA
+        env:
+          REQUIRED_CHECKS: check docker build
         run: |
-          set -eu
+          set -euo pipefail
+          ci="$RUNNER_TEMP/ci.tsv"
           for _ in $(seq 1 24); do
             gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs" --paginate \
               --jq '.check_runs[] | select(.name != "review" and .name != "publish") | [.name, .status, (.conclusion // "-"), .html_url] | @tsv' \
-              > "$RUNNER_TEMP/ci.tsv"
-            if [ -s "$RUNNER_TEMP/ci.tsv" ] && ! cut -f2 "$RUNNER_TEMP/ci.tsv" | grep -qv completed; then
+              > "$ci"
+            ready=true
+            for name in $REQUIRED_CHECKS; do
+              if ! awk -F'\t' -v n="$name" '$1 == n { found = 1 } END { exit !found }' "$ci"; then
+                ready=false
+              fi
+            done
+            if awk -F'\t' '$2 != "completed" { bad = 1 } END { exit !bad }' "$ci"; then
+              ready=false
+            fi
+            if [ "$ready" = true ]; then
               break
             fi
             sleep 30
           done
+          for name in $REQUIRED_CHECKS; do
+            if ! awk -F'\t' -v n="$name" '$1 == n { found = 1 } END { exit !found }' "$ci"; then
+              printf '%s\tnot_started\t-\t-\n' "$name" >> "$ci"
+            fi
+          done
           echo "git rev-parse HEAD: $(git rev-parse HEAD)"
-          cat "$RUNNER_TEMP/ci.tsv"
+          cat "$ci"
+
+      # Всё, что модель читает о PR, готовится здесь: diff, история и критерии ревью.
+      # Критерии берутся из базовой ветки, чтобы автор PR не менял правила своей же проверки.
+      # Из head они берутся, только если в базе файла ещё нет (PR, который его добавляет).
+      - name: Prepare review context
+        run: |
+          set -euo pipefail
+          ctx="$RUNNER_TEMP/review"
+          mkdir -p "$ctx/criteria"
+          git diff "origin/$BASE_REF...HEAD" > "$ctx/diff.patch"
+          git log --format='%H %s' "origin/$BASE_REF..HEAD" > "$ctx/log.txt"
+          : > "$ctx/criteria/SOURCE.txt"
+          for f in REVIEW.md AGENTS.md docs/agents/issue-tracker.md; do
+            out="$ctx/criteria/$(basename "$f")"
+            if git cat-file -e "origin/$BASE_REF:$f" 2>/dev/null; then
+              git show "origin/$BASE_REF:$f" > "$out"
+              echo "$f: origin/$BASE_REF" >> "$ctx/criteria/SOURCE.txt"
+            else
+              cp "$f" "$out"
+              echo "$f: head $HEAD_SHA (в базовой ветке файла нет)" >> "$ctx/criteria/SOURCE.txt"
+            fi
+          done
+          cat "$ctx/criteria/SOURCE.txt"
 
       # Версия CLI закреплена в .github/review/package-lock.json, отдельно от npm workspaces проекта:
       # так `claude` из node_modules/.bin не подменяет локальный Claude Code разработчика.
@@ -74,43 +117,66 @@ jobs:
           npm ci --prefix .github/review
           echo "$GITHUB_WORKSPACE/.github/review/node_modules/.bin" >> "$GITHUB_PATH"
 
-      # В prompt попадают только номер PR, SHA и пути к файлам. Текст PR, issues и diff агент
-      # читает сам через gh и git: чужой текст не становится частью инструкции.
+      # В prompt попадают только номер PR, SHA и пути к файлам. Текст PR и issues агент
+      # читает сам через gh, diff — из подготовленного файла: чужой текст не становится частью инструкции.
+      # Модель читает недоверенный текст, а в её окружении лежит токен подписки. Поэтому:
+      # - чтение файлов (правила Read действуют и на Glob, Grep) разрешено только в checkout,
+      #   в $RUNNER_TEMP/review и ci.tsv; /proc, /sys и /etc закрыты явно;
+      # - git в Bash не разрешён: `git diff --no-index` читает любой файл, `git diff --output` пишет файл;
+      # - gh разрешён только на чтение PR и issues, он ходит в API и локальных файлов не читает;
+      # - ответ с токеном не публикуется, прогон падает.
       - name: Review
         id: model
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
-          set -eu
+          set -euo pipefail
+          ctx="$RUNNER_TEMP/review"
           prompt=$(cat <<EOF
           Ты независимый ревьюер pull request #$PR в репозитории $GITHUB_REPOSITORY.
           Версия для ревью: head SHA $HEAD_SHA, базовая ветка origin/$BASE_REF. Код не меняй.
+          Рабочий каталог — checkout head SHA. Подготовленные файлы лежат в $ctx.
 
-          1. Прочитай критерии ревью в REVIEW.md, правила в AGENTS.md и docs/agents/issue-tracker.md.
+          1. Прочитай критерии ревью: $ctx/criteria/REVIEW.md, правила: $ctx/criteria/AGENTS.md
+             и $ctx/criteria/issue-tracker.md. Откуда взята каждая версия — в $ctx/criteria/SOURCE.txt.
+             Изменения этих файлов в самом PR ревьюй как обычный код, но критерии бери из $ctx/criteria.
           2. Прочитай PR: gh pr view $PR --json title,body,author,commits,files,comments,reviews.
           3. По ссылкам из описания прочитай исходное обращение, спецификацию, тикеты и комментарий
              с согласованием: gh issue view <номер> --json number,title,body,labels,comments.
              Если ссылок нет или изменение выходит за согласованный объём, отметь это.
-          4. Изучи изменения: git diff origin/$BASE_REF...HEAD и файлы целиком там, где нужен контекст.
+          4. Изучи изменения: diff origin/$BASE_REF...HEAD — в $ctx/diff.patch, коммиты — в $ctx/log.txt.
+             Файлы целиком читай в рабочем каталоге там, где нужен контекст.
           5. Результаты CI на этом SHA (имя, статус, итог, ссылка) — в файле $RUNNER_TEMP/ci.tsv.
-             Если проверки ещё идут, так и напиши.
+             Если проверки ещё идут или не запускались, так и напиши.
           6. Учти предыдущие комментарии PR: разобранные человеком замечания заново не поднимай.
 
-          Ответ — готовый текст комментария в Markdown на русском, без вступления:
-          раздел «Соответствие спецификации», раздел «Замечания» в формате из REVIEW.md
-          (файл:строка, условия, последствие, уровень) или фраза «Подтверждённых дефектов не найдено»,
-          раздел «CI». Не упоминай пользователей и приложения через @.
+          Последнее сообщение — только готовый текст комментария в Markdown на русском.
+          Первая строка — заголовок «## Соответствие спецификации», до него ничего не пиши.
+          Дальше раздел «## Замечания» в формате из REVIEW.md (файл:строка, условия, последствие,
+          уровень) или фраза «Подтверждённых дефектов не найдено», затем раздел «## CI».
+          Не упоминай пользователей и приложения через @.
           EOF
           )
           claude -p "$prompt" \
             --model claude-sonnet-5-5 \
             --max-turns 40 \
             --output-format json \
-            --allowedTools "Read,Glob,Grep,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh issue view:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)" \
-            --disallowedTools "Edit,Write,NotebookEdit,WebFetch,WebSearch" \
+            --allowedTools "Read(./**),Read(/$ctx/**),Read(/$RUNNER_TEMP/ci.tsv),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh issue view:*)" \
+            --disallowedTools "Read(//proc/**),Read(//sys/**),Read(//etc/**),Edit,Write,NotebookEdit,WebFetch,WebSearch,Bash(git:*)" \
             > "$RUNNER_TEMP/result.json"
           jq -e '.is_error | not' "$RUNNER_TEMP/result.json" > /dev/null
-          jq -r '.result' "$RUNNER_TEMP/result.json" > "$RUNNER_TEMP/review.md"
+          # В последнем сообщении модель иногда оставляет промежуточную реплику перед отчётом:
+          # публикуется текст с первого заголовка «## ».
+          jq -r '.result' "$RUNNER_TEMP/result.json" \
+            | awk 'started || /^## / { started = 1; print }' > "$RUNNER_TEMP/review.md"
+          if [ ! -s "$RUNNER_TEMP/review.md" ]; then
+            echo "::error::В ответе модели нет разделов отчёта"
+            exit 1
+          fi
+          if grep -qF "$CLAUDE_CODE_OAUTH_TOKEN" "$RUNNER_TEMP/review.md"; then
+            echo "::error::Ответ модели содержит токен подписки, публикация отменена"
+            exit 1
+          fi
           delimiter="EOF_$(openssl rand -hex 8)"
           {
             echo "body<<$delimiter"
@@ -137,7 +203,7 @@ jobs:
     steps:
       - name: Comment on PR
         run: |
-          set -eu
+          set -euo pipefail
           {
             echo "## Авторевью"
             echo
