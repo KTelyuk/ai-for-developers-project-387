@@ -31,6 +31,19 @@ describe('админка: встречи', () => {
     expect(items[1]).toHaveTextContent('Борис');
   });
 
+  it('показывает предмет разговора целиком, с переносами строк и как обычный текст', async () => {
+    const subject = `Первая <b>строка</b>\n\nВторая ${'длинная '.repeat(100)}`.trim();
+    mockAdminBookingsApi([{ ...anna, subject }, boris]);
+    renderAt(PATH);
+
+    const items = within(await bookingsList()).getAllByRole('listitem');
+    const shown = within(items[0] as HTMLElement).getByText(/Первая/);
+    expect(shown.textContent).toBe(subject);
+    expect(shown).toHaveClass('whitespace-pre-wrap');
+    expect(items[0]?.querySelector('b')).toBeNull();
+    expect(items[1]).not.toHaveTextContent('Предмет разговора');
+  });
+
   it('без встреч показывает понятное пустое состояние', async () => {
     mockAdminBookingsApi([]);
     renderAt(PATH);

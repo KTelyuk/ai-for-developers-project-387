@@ -7,6 +7,7 @@ import {
 } from '@/api/@tanstack/react-query.gen.ts';
 import { AdminNav } from '@/components/AdminNav.tsx';
 import { LoadError, Loading } from '@/components/LoadState.tsx';
+import { BookingSubject } from '@/components/BookingSubject.tsx';
 import { Button } from '@/components/ui/button.tsx';
 import { formatMomentDay, formatTimeRange } from '@/lib/format.ts';
 import { OWNER_TIME_ZONE_LABEL } from '@/lib/schedule.ts';
@@ -35,6 +36,12 @@ function BookingItem({ booking, onMissing }: { booking: AdminBooking; onMissing:
         <p className="text-sm break-words text-muted-foreground">
           {booking.guestName} · {booking.guestEmail}
         </p>
+        {booking.subject ? (
+          <p className="mt-1 text-sm">
+            <span className="text-muted-foreground">Предмет разговора: </span>
+            <BookingSubject subject={booking.subject} />
+          </p>
+        ) : null}
         {failed ? (
           <p role="alert" className="text-sm text-destructive">
             Не удалось отменить встречу
