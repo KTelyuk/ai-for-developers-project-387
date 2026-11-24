@@ -14,3 +14,6 @@ coverage/
 # Отчёты Playwright
 test-results/
 playwright-report/
+
+# Отчёты Lighthouse CI (аудит пишет их в $RUNNER_TEMP, локальный запуск — в .lighthouseci/)
+.lighthouseci/

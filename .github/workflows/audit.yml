@@ -1,0 +1,158 @@
+name: audit
+
+# Регулярный аудит скорости страниц: Lighthouse CI собирает отчёт, агент Claude Code разбирает
+# сводку, ищет уже заведённые задачи и создаёт issue только по новой находке.
+# Описание: README.md, раздел «Аудит скорости по расписанию».
+on:
+  schedule:
+    # Раз в сутки, 03:17 по Алматы. GitHub может задержать или пропустить запуск по расписанию.
+    - cron: '17 3 * * *'
+      timezone: Asia/Almaty
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'live — аудит APP_URL, sample — учебный отчёт с подготовленной находкой'
+        type: choice
+        options:
+          - live
+          - sample
+        default: live
+
+# Аудиты идут по одному: следующий ждёт текущий, иначе два агента могут завести одну задачу дважды.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Задачи и комментарии агент создаёт токеном Claude GitHub App (id-token: write),
+    # GITHUB_TOKEN получает только чтение. Код и PR этот сценарий не меняет.
+    permissions:
+      contents: read
+      issues: read
+      id-token: write
+    env:
+      SOURCE: ${{ inputs.source || 'live' }}
+      APP_URL: ${{ vars.APP_URL }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # Отчёты пишутся в $RUNNER_TEMP, вне рабочего дерева, и в коммиты не попадают.
+      - name: Prepare report directory
+        run: mkdir -p "$RUNNER_TEMP/audit"
+
+      # Бесплатный Render засыпает: первый запрос будит сервис до минуты. Без прогрева
+      # Lighthouse замерил бы холодный старт, а не страницу.
+      - name: Wake up app
+        id: app
+        if: env.SOURCE == 'live'
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "status=unavailable" >> "$GITHUB_OUTPUT"
+            echo "reason=не задана переменная репозитория APP_URL" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          for attempt in $(seq 1 12); do
+            if curl -fsS -m 30 "$APP_URL/api/health" > /dev/null; then
+              echo "status=ok" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Попытка $attempt: $APP_URL/api/health не ответил"
+            sleep 10
+          done
+          echo "status=unavailable" >> "$GITHUB_OUTPUT"
+          echo "reason=$APP_URL/api/health не ответил за 12 попыток" >> "$GITHUB_OUTPUT"
+
+      # Версия Lighthouse CI закреплена в .github/audit/package-lock.json, вне npm workspaces проекта.
+      - name: Run Lighthouse CI
+        if: env.SOURCE == 'live' && steps.app.outputs.status == 'ok'
+        working-directory: ${{ runner.temp }}/audit
+        run: |
+          npm ci --prefix "$GITHUB_WORKSPACE/.github/audit"
+          lhci="$GITHUB_WORKSPACE/.github/audit/node_modules/.bin/lhci"
+          # Три прогона на страницу, в сводку идёт медианный. Ошибка Lighthouse не роняет прогон:
+          # сводка запишет отсутствие данных.
+          "$lhci" collect --url "$APP_URL/" --url "$APP_URL/book" --numberOfRuns 3 || true
+          "$lhci" upload --target filesystem --outputDir "$RUNNER_TEMP/audit/lhci" || true
+
+      - name: Summarize
+        env:
+          APP_STATUS: ${{ steps.app.outputs.status }}
+          APP_STATUS_REASON: ${{ steps.app.outputs.reason }}
+        run: |
+          if [ "$SOURCE" = sample ]; then
+            jq --arg run "$RUN_URL" '.run_url = $run' .github/audit/sample-summary.json \
+              > "$RUNNER_TEMP/audit/summary.json"
+          else
+            node .github/audit/summarize.mjs "$RUNNER_TEMP/audit/lhci" "$RUNNER_TEMP/audit/summary.json"
+          fi
+          jq '{sample, status, reason, findings: [.findings[].key]}' "$RUNNER_TEMP/audit/summary.json"
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: audit-${{ env.SOURCE }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/audit/
+          include-hidden-files: true
+          retention-days: 30
+
+      # Ссылка на артефакт временная: агент переносит цифры находки в текст issue.
+      # В prompt попадают только пути, источник и ссылка на прогон; данные агент читает из файла.
+      - uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Ты разбираешь регулярный аудит скорости страниц приложения в репозитории ${{ github.repository }}.
+            Источник: ${{ env.SOURCE }}. Прогон: ${{ env.RUN_URL }}. Проверенная версия main: ${{ github.sha }}.
+            Сводка Lighthouse лежит в файле ${{ runner.temp }}/audit/summary.json, полный отчёт — в артефакте
+            audit-${{ env.SOURCE }}-${{ github.run_id }} этого прогона (хранится 30 дней).
+
+            1. Прочитай сводку. Поле status: ok — данные есть; no_data — данных нет (причина в reason).
+               Если sample = true, это УЧЕБНЫЙ отчёт с подготовленной находкой, а не дефект приложения.
+            2. Найди журнал аудита: gh issue list --label audit-log --state open --json number,title.
+               Если журнала нет, создай его: gh issue create --title "Аудит скорости: журнал запусков"
+               --label audit-log --body "<одна фраза: сюда агент пишет вывод каждого запуска audit.yml>".
+            3. Для каждой находки из findings ищи задачу по её полю key, включая закрытые:
+               gh issue list --label audit --state all --limit 200 --json number,title,state,body
+               и проверь, что в body есть строка «audit-key: <key>» ровно с этим ключом.
+               - Задача найдена: новую не создавай и в неё не пиши. Если она закрыта, отметь это в журнале
+                 как «находка снова появилась после закрытия #N»; решение о повторном открытии — за человеком.
+               - Задачи нет: создай одну задачу на находку:
+                 gh issue create --title "<заголовок>" --label audit --label needs-triage --body "<текст>".
+                 Заголовок: «Скорость: <title> на <path> — <value>». Для учебной находки добавь префикс
+                 «[Учебный] » и метку --label учебный.
+                 Текст задачи на русском:
+                 * первая строка для учебной находки: «> Учебная задача: находка подготовлена вручную
+                   в .github/audit/sample-summary.json и не является подтверждённым дефектом приложения.»;
+                 * «Проблема»: метрика, страница, значение, оценка и порог из threshold, приложение app_url,
+                   версия main ${{ github.sha }}, дата generated_at;
+                 * «Что предлагается»: действие по opportunities (экономия в мс); если их нет, предложи,
+                   что проверить, и прямо напиши, что это гипотеза;
+                 * «Связь с отчётом»: ссылка на прогон ${{ env.RUN_URL }} и имя артефакта; цифры
+                   уже перенесены в текст, потому что артефакт временный;
+                 * «Дальше»: задача — входящее обращение, решение о работе принимает человек,
+                   затем спецификация и тикеты по docs/agents/issue-tracker.md;
+                 * последней строкой: <!-- audit-key: <key> -->
+            4. Оставь в журнале ровно один комментарий о запуске:
+               gh issue comment <номер журнала> --body "<текст>". В нём: дата, источник (live или учебный),
+               ссылка на прогон, приложение, оценки производительности страниц; затем по каждой находке —
+               «новая задача #N» или «уже есть задача #N, новых сведений нет»; если находок нет —
+               «Находок нет»; если status = no_data — «Данных нет: <reason>. Это не подтверждает,
+               что проблем нет», и задачи в этом случае не создавай.
+
+            Не меняй файлы и код, не создавай ветки и PR, не трогай задачи без метки audit.
+            Не упоминай пользователей и приложения через @.
+          claude_args: >-
+            --model claude-sonnet-5-5
+            --max-turns 30
+            --allowedTools "Read,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue comment:*)"
+            --disallowedTools "Edit,Write,NotebookEdit,WebFetch,WebSearch,Bash(git:*)"

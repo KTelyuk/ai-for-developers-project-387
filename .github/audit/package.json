@@ -1,0 +1,8 @@
+{
+  "name": "audit-tools",
+  "private": true,
+  "description": "Lighthouse CI для аудита скорости в .github/workflows/audit.yml. Не входит в npm workspaces проекта.",
+  "devDependencies": {
+    "@lhci/cli": "0.16.1"
+  }
+}

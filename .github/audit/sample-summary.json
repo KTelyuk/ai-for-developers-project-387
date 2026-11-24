@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "sample": true,
+  "sample_note": "УЧЕБНЫЙ ОТЧЁТ. Находка подготовлена вручную для демонстрации создания issue и не является подтверждённым дефектом приложения.",
+  "app_url": "https://ai-for-developers-project-387-05lg.onrender.com",
+  "run_url": "",
+  "generated_at": "2026-11-24T00:00:00.000Z",
+  "status": "ok",
+  "lighthouse_version": "учебные данные",
+  "preset": "mobile (по умолчанию Lighthouse)",
+  "pages": [
+    {
+      "path": "/",
+      "performance_score": 0.93,
+      "metrics": {
+        "first-contentful-paint": { "score": 0.95, "value": "1.4 s" },
+        "largest-contentful-paint": { "score": 0.9, "value": "2.3 s" },
+        "total-blocking-time": { "score": 1, "value": "30 ms" },
+        "cumulative-layout-shift": { "score": 1, "value": "0" },
+        "speed-index": { "score": 0.96, "value": "1.6 s" }
+      }
+    },
+    {
+      "path": "/book",
+      "performance_score": 0.41,
+      "metrics": {
+        "first-contentful-paint": { "score": 0.78, "value": "2.1 s" },
+        "largest-contentful-paint": { "score": 0.21, "value": "6.4 s" },
+        "total-blocking-time": { "score": 0.88, "value": "210 ms" },
+        "cumulative-layout-shift": { "score": 1, "value": "0.01" },
+        "speed-index": { "score": 0.7, "value": "3.9 s" }
+      }
+    }
+  ],
+  "findings": [
+    {
+      "key": "audit-sample:largest-contentful-paint@/book",
+      "audit": "largest-contentful-paint",
+      "title": "Largest Contentful Paint",
+      "path": "/book",
+      "value": "6.4 s",
+      "score": 0.21,
+      "threshold": "score < 0.5",
+      "opportunities": [
+        {
+          "id": "render-blocking-resources",
+          "title": "Eliminate render-blocking resources",
+          "savings_ms": 1850
+        },
+        { "id": "unused-javascript", "title": "Reduce unused JavaScript", "savings_ms": 900 }
+      ]
+    }
+  ]
+}
