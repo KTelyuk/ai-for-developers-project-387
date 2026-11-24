@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/KTelyuk/ai-for-developers-project-387/compare/v0.2.0...v0.3.0) (2026-11-24)
+
+
+### Features
+
+* предмет разговора в записи ([#15](https://github.com/KTelyuk/ai-for-developers-project-387/issues/15)) ([#28](https://github.com/KTelyuk/ai-for-developers-project-387/issues/28)) ([289ac81](https://github.com/KTelyuk/ai-for-developers-project-387/commit/289ac81ba6b88ea1cd62aaff981095f1b78b9068))
+
 ## [0.2.0](https://github.com/KTelyuk/ai-for-developers-project-387/compare/v0.1.0...v0.2.0) (2026-11-22)
 
 
