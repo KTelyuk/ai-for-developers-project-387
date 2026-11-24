@@ -71,6 +71,11 @@ jobs:
           echo "status=unavailable" >> "$GITHUB_OUTPUT"
           echo "reason=$APP_URL/api/health не ответил за 12 попыток" >> "$GITHUB_OUTPUT"
 
+      # Node из mise.toml, как в остальных воркфлоу: @lhci/cli требует node >= 22.19,
+      # а версия Node на ubuntu-latest проектом не закреплена.
+      - uses: jdx/mise-action@d5574b52816a478f9d4e6529a3f6ff17a8a36785 # v5.2.8
+        if: env.SOURCE == 'live' && steps.app.outputs.status == 'ok'
+
       # Версия Lighthouse CI закреплена в .github/audit/package-lock.json, вне npm workspaces проекта.
       - name: Run Lighthouse CI
         if: env.SOURCE == 'live' && steps.app.outputs.status == 'ok'
@@ -78,10 +83,12 @@ jobs:
         run: |
           npm ci --prefix "$GITHUB_WORKSPACE/.github/audit"
           lhci="$GITHUB_WORKSPACE/.github/audit/node_modules/.bin/lhci"
-          # Три прогона на страницу, в сводку идёт медианный. Ошибка Lighthouse не роняет прогон:
-          # сводка запишет отсутствие данных.
-          "$lhci" collect --url "$APP_URL/" --url "$APP_URL/book" --numberOfRuns 3 || true
-          "$lhci" upload --target filesystem --outputDir "$RUNNER_TEMP/audit/lhci" || true
+          # Три прогона на страницу, в сводку идёт медианный. Сбой Lighthouse не прерывает шаги:
+          # сводка запишет отсутствие данных, агент — вывод в журнал, а последний шаг уронит прогон.
+          "$lhci" collect --url "$APP_URL/" --url "$APP_URL/book" --numberOfRuns 3 \
+            || echo "::warning::lhci collect завершился с ошибкой"
+          "$lhci" upload --target filesystem --outputDir "$RUNNER_TEMP/audit/lhci" \
+            || echo "::warning::lhci upload завершился с ошибкой"
 
       - name: Summarize
         env:
@@ -156,3 +163,13 @@ jobs:
             --max-turns 30
             --allowedTools "Read,Bash(gh issue list:*),Bash(gh issue view:*),Bash(gh issue create:*),Bash(gh issue comment:*)"
             --disallowedTools "Edit,Write,NotebookEdit,WebFetch,WebSearch,Bash(git:*)"
+
+      # Отсутствие данных не должно выглядеть зелёным прогоном: вывод уже записан в журнал,
+      # а красный прогон присылает уведомление о сломанном аудите.
+      - name: Fail on missing data
+        run: |
+          status=$(jq -r .status "$RUNNER_TEMP/audit/summary.json")
+          if [ "$status" != ok ]; then
+            echo "::error::Аудит без данных: $(jq -r .reason "$RUNNER_TEMP/audit/summary.json")"
+            exit 1
+          fi
