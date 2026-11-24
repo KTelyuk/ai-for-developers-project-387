@@ -111,9 +111,22 @@ for (const entry of representative) {
   }
 }
 
+// Сбой замера — не «проблем нет»: без единой замеренной страницы данных нет,
+// а частичный сбой помечается отдельно и тоже роняет прогон.
+const failed = pages.filter((page) => page.error);
+if (failed.length === pages.length) {
+  noData(
+    `Lighthouse не замерил ни одной страницы: ${failed.map((p) => `${p.path} — ${p.error}`).join('; ')}`,
+  );
+  process.exit(0);
+}
+
 write({
   ...base,
-  status: 'ok',
+  status: failed.length > 0 ? 'partial' : 'ok',
+  ...(failed.length > 0 && {
+    reason: `не замерены страницы: ${failed.map((p) => `${p.path} — ${p.error}`).join('; ')}`,
+  }),
   lighthouse_version: lighthouseVersion,
   preset: 'mobile (по умолчанию Lighthouse)',
   pages,
